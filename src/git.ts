@@ -51,9 +51,11 @@ export async function cloneVault(repoUrl: string, branch: string): Promise<void>
   }
 }
 
-// FR-POLL-1 (fetch path) / FR-POLL-5: failures are returned, never thrown, so the caller can log and retry
+// FR-POLL-1 (fetch path) / FR-POLL-5: failures are returned, never thrown, so the caller can log and retry.
+// Explicit refspec (not a bare branch name) so origin/<branch> is created/updated even if it wasn't the
+// branch selected at clone time — a bare `fetch origin <branch>` only updates FETCH_HEAD, not origin/<branch>.
 export async function fetchVault(branch: string): Promise<GitResult> {
-  return runVaultGit(["fetch", "--prune", "origin", branch])
+  return runVaultGit(["fetch", "--prune", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`])
 }
 
 export async function remoteHeadSha(branch: string): Promise<string> {
