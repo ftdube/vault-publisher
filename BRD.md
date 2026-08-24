@@ -1,0 +1,262 @@
+# Business Requirements Document — vault-publisher
+
+## Document Control
+
+| Field | Value |
+|---|---|
+| Document title | Business Requirements Document — vault-publisher |
+| Document version | 0.1 (Draft) |
+| System version documented | pre-implementation |
+| Date | 2026-07-28 |
+| Author | Claude Code, on behalf of the repository owner |
+| Classification | Public |
+| Related artifacts | [`agents.md`](agents.md), [`RISKS.md`](RISKS.md), [`README.md`](README.md), [`next-steps.md`](next-steps.md) |
+
+### Revision History
+
+| Version | Date | Summary |
+|---|---|---|
+| 0.1 | 2026-07-28 | Initial draft. Pre-implementation; all requirements are Planned. |
+
+### Approval
+
+| Role | Name | Date |
+|---|---|---|
+| Product Owner | *(repository owner)* | |
+
+---
+
+## 1. Executive Summary
+
+vault-publisher is a self-contained Docker daemon that polls an Obsidian vault git repository, builds it as a static website using [Quartz](https://quartz.jzhao.xyz/), and exposes the output for a Caddy sidecar to serve. It replaces a CronJob-based approach (a Quartz fork run periodically by k3s, with a separate web server sidecar) with a long-running process that owns the full build lifecycle — polling, building, and persisting output — without requiring CronJob orchestration, shell-script configuration injection, or a quartz fork.
+
+The system is deliberately generic: it serves any Obsidian vault accessible via a git remote. Personal configuration is injected entirely at runtime via environment variables and Kubernetes Secrets, keeping the image free of personal identifiers and publishable as a standalone open-source tool.
+
+## 2. Business Background & Problem Statement
+
+The operator previously ran a fork of [jackyzha0/quartz](https://github.com/jackyzha0/quartz) as a k3s CronJob to publish a personal knowledge vault as a static site. This approach had three compounding problems:
+
+1. **Fork maintenance overhead.** Every upstream quartz release required a rebase. Non-trivial changes (plugin install architecture, Dockerfile structure) were inherited silently or required manual cherry-picks.
+2. **Operational complexity.** A shell-script entrypoint injected config via `envsubst` at container startup. A separate CronJob orchestrated the build. A web server sidecar served the output. Three concerns, three moving parts, coordinated by k8s manifests.
+3. **Cold-start cost on constrained hardware.** The CronJob used ephemeral storage (`emptyDir`), so every pod restart triggered a full `git clone` + full `npx quartz build`. On a 2-node RPi5 4GB cluster already running ~650 MB of workloads, this is a meaningful spike.
+
+The replacement design addresses all three: quartz as a versioned npm dependency eliminates fork debt; a single long-running container owns the full build cycle; `hostPath` persistence means restarts are incremental (`git pull` + conditional rebuild) rather than cold starts.
+
+## 3. Goals & Objectives
+
+| # | Goal | Measure |
+|---|---|---|
+| G1 | Publish any Obsidian vault as a Quartz static site from a git remote | Site accessible via Caddy within one `POLL_INTERVAL` of a vault commit |
+| G2 | Rebuild automatically on vault changes without manual intervention | Daemon detects HEAD change and rebuilds without operator action |
+| G3 | Survive pod restarts without a full cold-start rebuild | On restart, Caddy serves the previous build immediately; rebuild only if HEAD changed |
+| G4 | Run sustainably on RPi5 4GB alongside existing cluster workloads | Peak build RAM < 500 MB; idle resident RAM < 100 MB |
+| G5 | Eliminate quartz fork maintenance overhead | quartz version = a single `package.json` field; no local patches |
+| G6 | Be publishable as a generic open-source tool with zero personal identifiers | No domains, hostnames, usernames, or vault content in the committed image or repo |
+
+## 4. Scope
+
+### 4.1 In Scope
+
+- A Docker image containing: Node.js runtime, `git`, `quartz` (npm dependency), a poll-build daemon, and a default `quartz.config.yaml` with env var placeholders.
+- A daemon entrypoint that: clones the vault on first run (or pulls on subsequent runs), runs `npx quartz build` when HEAD changes, writes output atomically to `/site`.
+- Configurable poll interval, git remote, branch, and quartz site parameters via environment variables.
+- SSH deploy key support for private vault repos.
+- A GitHub Actions CI workflow (`ci.yml`) that lints, tests, scans, builds, and pushes the image to GHCR.
+- Kubernetes deployment documentation (two-container Pod, `hostPath` volumes, `nodeSelector`).
+
+### 4.2 Out of Scope
+
+| Item | Why |
+|---|---|
+| Built-in web server | Caddy sidecar handles serving; image should not bundle a second HTTP server |
+| Quartz plugin authoring or forking | quartz is a black-box dependency; plugins are installed by quartz's own install step |
+| Vault write-back / sync | This system is read-only with respect to the vault; it clones and pulls, never pushes |
+| Authentication / access control on the served site | Delegated to the ingress layer (Traefik, Cloudflare Tunnel, etc.) |
+| Multi-vault support in a single container | One container, one vault; run multiple containers for multiple vaults |
+| DataviewJS pre-rendering | Deferred; tracked in `next-steps.md` |
+| Obsidian Bases support | Upstream `feat/bases` not yet merged; deferred |
+
+## 5. Stakeholders & Roles
+
+| Role | Interest |
+|---|---|
+| Operator / self-hoster | Deploys the image to their k3s cluster; configures vault git remote and site parameters |
+| End user | Reads the published static site via a browser |
+| Upstream (Quartz) | Defines the build toolchain this image depends on |
+| Open-source community | May fork or adapt for their own vault publishing setup |
+
+## 6. Assumptions & Constraints
+
+- **A1.** The vault is an Obsidian-format Markdown tree in a git repository accessible by the container (SSH or HTTPS).
+- **A2.** The vault contains a valid `quartz.config.yaml` or the image's default config is used (env var overrides apply).
+- **A3.** The deployment target is a single-node `hostPath`-capable Kubernetes cluster or Docker Compose for local dev.
+- **A4.** The Caddy sidecar is the only consumer of `/site`; no other process writes to that volume.
+- **C1.** The image must contain no personal identifiers — no domains, hostnames, usernames, vault content, or personal infrastructure specifics.
+- **C2.** Build output must never be partially visible during a write. Atomic rename from a staging path is mandatory.
+- **C3.** quartz must remain an unpatched npm dependency. Any required behavior change must be achieved via config, not code patches.
+
+## 7. Glossary
+
+| Term | Meaning |
+|---|---|
+| Vault | An Obsidian-format Markdown tree tracked in a git repository |
+| Daemon | The long-running container process that polls git and triggers builds |
+| Poll interval | Seconds between `git fetch` calls; a build only fires when HEAD changes |
+| `/vault` | hostPath directory where the vault git clone lives |
+| `/site` | hostPath directory where the built static site is written; served by Caddy |
+| `/site-next` | Staging directory; build output written here, then renamed to `/site` atomically |
+| Quartz | The upstream static site generator; used as an unpatched npm dependency |
+| Caddy | Lightweight HTTP server deployed as a sidecar, reading from `/site` |
+| hostPath | Kubernetes volume type backed by a directory on the node's local disk |
+
+## 8. System Context & Architecture
+
+```
+Vault git repo (any host — SSH or HTTPS)
+  │
+  │ git clone (first run) / git fetch + pull (subsequent)
+  ▼
+┌─────────────────────────────────────────┐
+│  Pod (pinned to Node 1 via nodeSelector) │
+│                                         │
+│  ┌─────────────────────┐                │
+│  │  vault-publisher    │                │
+│  │  (builder daemon)   │                │
+│  │                     │                │
+│  │  loop:              │                │
+│  │    git fetch        │                │
+│  │    if HEAD changed: │                │
+│  │      quartz build   │                │
+│  │      → /site-next   │                │
+│  │      rename → /site │                │
+│  │    sleep POLL_INTERVAL               │
+│  └──────────┬──────────┘                │
+│             │ hostPath: /site (rw)      │
+│  ┌──────────┴──────────┐                │
+│  │  Caddy sidecar      │                │
+│  │  serves /site (ro)  │                │
+│  └──────────┬──────────┘                │
+└─────────────┼───────────────────────────┘
+              │ HTTP
+              ▼
+         Traefik ingress → Cloudflare Tunnel → Browser
+```
+
+Component responsibilities:
+
+| Component | Responsibility | Writes to vault? |
+|---|---|---|
+| vault-publisher daemon | git poll, quartz build, atomic output swap | No |
+| Caddy sidecar | Serve `/site` over HTTP | No |
+| Traefik / ingress | TLS termination, routing | No |
+
+## 9. Functional & Non-Functional Requirements
+
+### 9.1 Numbering Convention
+
+Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Status: `Planned` (pre-implementation).
+
+### 9.2 Daemon — Git Polling (`POLL`)
+
+| ID | Requirement | Priority | Status |
+|---|---|---|---|
+| FR-POLL-1 | On startup, the daemon SHALL clone `VAULT_REPO_URL` to `/vault` if `/vault/.git` does not exist; otherwise it SHALL run `git fetch`. | Must | Planned |
+| FR-POLL-2 | After fetch, if the remote HEAD for `VAULT_BRANCH` differs from the local HEAD, the daemon SHALL run a build (§9.3) and update local HEAD. | Must | Planned |
+| FR-POLL-3 | The daemon SHALL sleep `POLL_INTERVAL` seconds between fetch cycles. | Must | Planned |
+| FR-POLL-4 | SSH key at `SSH_KEY_PATH` SHALL be used for git operations when present; HTTPS is used otherwise. | Must | Planned |
+| FR-POLL-5 | A fetch failure SHALL be logged and retried on the next cycle; it SHALL NOT crash the daemon. | Must | Planned |
+
+### 9.3 Daemon — Build (`BUILD`)
+
+| ID | Requirement | Priority | Status |
+|---|---|---|---|
+| FR-BUILD-1 | The daemon SHALL invoke `npx quartz build -d /vault --output /site-next`. | Must | Planned |
+| FR-BUILD-2 | On build success, the daemon SHALL atomically rename `/site-next` to `/site`. | Must | Planned |
+| FR-BUILD-3 | On build failure, `/site` SHALL remain unchanged (the previous successful build continues to be served). | Must | Planned |
+| FR-BUILD-4 | Before invoking quartz, the daemon SHALL substitute env var placeholders in `quartz.config.yaml` using `envsubst`. | Must | Planned |
+| FR-BUILD-5 | A build SHALL also be triggered on the first startup even if `/vault` already exists and HEAD has not changed, to ensure `/site` is populated after a config change. | Should | Planned |
+
+### 9.4 Configuration (`CFG`)
+
+| ID | Requirement | Priority | Status |
+|---|---|---|---|
+| FR-CFG-1 | All site-specific parameters (`QUARTZ_BASE_URL`, `QUARTZ_PAGE_TITLE`, `QUARTZ_SHORT_NAME`) SHALL be injected via environment variables, not baked into the image. | Must | Planned |
+| FR-CFG-2 | A default `quartz.config.yaml` SHALL be included in the image, with `${QUARTZ_*}` placeholders, covering a working general-purpose Quartz configuration. | Must | Planned |
+| FR-CFG-3 | Operators MAY override the default config by mounting a custom `quartz.config.yaml` at the app root. | Should | Planned |
+
+**Non-Functional**
+
+| ID | Requirement | Priority | Status |
+|---|---|---|---|
+| NFR-POLL-1 | Idle resident RAM (between builds) SHALL be < 100 MB. | Must | Planned |
+| NFR-BUILD-1 | Peak RAM during a quartz build SHALL be < 500 MB. | Must | Planned |
+| NFR-BUILD-2 | Caddy SHALL never serve a partially-written build; the atomic rename (FR-BUILD-2) is the sole mechanism guaranteeing this. | Must | Planned |
+| NFR-BUILD-3 | The image SHALL include `node_modules` pre-installed; no `npm install` SHALL run at pod startup. | Must | Planned |
+| NFR-CFG-1 | The committed image and repo SHALL contain no personal identifiers (domains, hostnames, usernames, vault content). | Must | Planned |
+
+## 10. Data Requirements
+
+| Data | Location | Notes |
+|---|---|---|
+| Vault git clone | `/vault` (hostPath) | Persists across pod restarts; updated by `git pull` |
+| Built static site | `/site` (hostPath) | Persists across pod restarts; always a complete, consistent snapshot |
+| Build staging | `/site-next` | Ephemeral; created per build, renamed to `/site` on success, deleted on failure |
+| quartz config | `/usr/src/app/quartz.config.yaml` | Default baked into image; overridable via ConfigMap mount |
+| SSH deploy key | `SSH_KEY_PATH` (K8s Secret mount) | Must be `0400`; read at daemon startup only |
+
+## 11. Interface Requirements
+
+| Interface | Details |
+|---|---|
+| Git remote | SSH (preferred for private repos) or HTTPS; configured via `VAULT_REPO_URL` |
+| HTTP (served site) | Caddy listens on port 80 inside the Pod; Traefik ingress terminates TLS externally |
+| CI | GitHub Actions `ci.yml`; publishes to `ghcr.io/<owner>/vault-publisher:latest` |
+
+## 12. Security & Compliance Requirements
+
+| ID | Requirement | Priority | Status |
+|---|---|---|---|
+| NFR-SEC-1 | SSH deploy keys SHALL be read-only (`0400`) and mounted from a K8s Secret, never committed to the repo. | Must | Planned |
+| NFR-SEC-2 | The daemon SHALL NOT push to the vault repo; it clones/pulls only. | Must | Planned |
+| NFR-SEC-3 | No personal identifiers SHALL be committed to this repository (see C1). | Must | Planned |
+| NFR-SEC-4 | The built static site is unauthenticated by design; access control is the ingress layer's responsibility. | Must | Planned |
+
+## 13. Observability & Monitoring Requirements
+
+Minimum viable observability for initial deployment:
+
+| Signal | Mechanism |
+|---|---|
+| Build success / failure | Logged to stdout with timestamp and vault HEAD SHA |
+| Last successful build | Logged; optionally written to `/site/.build-info` |
+| Pod liveness | Standard Kubernetes liveness probe (file existence check on `/site/index.html`) |
+
+Prometheus metrics and Grafana dashboards are deferred (see `next-steps.md`).
+
+## 14. Success Metrics / Acceptance Criteria
+
+- **G1:** Site is reachable via browser within `POLL_INTERVAL` seconds of a vault commit.
+- **G2:** A `git push` to the vault repo results in a rebuilt site with no operator action.
+- **G3:** After a pod restart, the previous build is immediately served; a rebuild only fires if HEAD changed.
+- **G4:** `kubectl top pod` shows < 100 MB during idle, < 500 MB peak during build.
+- **G5:** `package.json` is the sole reference to the quartz version; no local patches exist.
+- **G6:** `git grep` finds no personal domains, hostnames, or usernames in the committed repo.
+
+## 15. Appendices
+
+### Appendix A — Related Documents
+
+- [`agents.md`](agents.md) — hard rules and non-obvious operational gotchas
+- [`RISKS.md`](RISKS.md) — risk register
+- [`next-steps.md`](next-steps.md) — deferred work and phase roadmap
+- [`README.md`](README.md) — user-facing setup guide
+- [jackyzha0/quartz](https://github.com/jackyzha0/quartz) — upstream static site generator (unpatched dependency)
+
+### Appendix B — Rejected Alternatives
+
+| Alternative | Why rejected |
+|---|---|
+| Fork quartz and run as CronJob | Rebase debt; three separate concerns (build, config injection, serving) with no single owner |
+| `emptyDir` instead of `hostPath` | Full cold-start rebuild on every pod restart — unacceptable on RPi5 4GB |
+| `quartz build --serve` as the entrypoint | Keeps quartz process resident in memory permanently; less RAM-efficient than ephemeral builds |
+| NAS-backed PVC for `/site` | Adds NAS dependency to serving path; `hostPath` is simpler and already used by Postgres on this cluster |
