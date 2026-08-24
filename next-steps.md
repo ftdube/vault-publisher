@@ -7,10 +7,10 @@
 | Daemon: git poll + conditional build + two-step rename | Implemented, untested end-to-end | TypeScript, `src/` compiled to `dist/`; see Verify item below |
 | Dockerfile: node:22-slim, git, `@jackyzha0/quartz` git dep, pre-baked plugins | Builds successfully in CI; daemon untested end-to-end | See Verify item below |
 | Default `quartz.config.yaml` with env var placeholders | Implemented | Baked into image (decided — see below) |
-| CI: `ci.yml` (typecheck/test/scan/build/push) to GHCR | Implemented | Mirrors `secondbrain-mcp`'s combined workflow. "lint" renamed to "typecheck" — there's no ESLint config, just `tsc --noEmit` |
+| CI: `ci.yml` (typecheck/test/scan/build/push) to GHCR | Implemented | "lint" renamed to "typecheck" — there's no ESLint config, just `tsc --noEmit` |
 | Unit tests: `src/*.test.ts` via `node:test` (through `tsx`, not compiled) | Implemented | Covers `env.ts`/`log.ts`/`build.ts`'s `substituteConfig`. Path-coupled logic (`git.ts`, rename/build-info in `build.ts`) needs real `/vault`/`/site` — left to the Docker-based Verify item below, not unit-tested |
 | K8s deployment docs: two-container Pod, hostPath, nodeSelector | Planned | |
-| Gatus health check for the served site | Planned | Ocean pattern: every new service gets a Gatus check |
+| Health check for the served site | Planned | Every new service gets a Gatus (or equivalent) check once deployed |
 
 ## Verify — build and run the actual image
 
@@ -25,8 +25,8 @@ Baked into the image with `envsubst` placeholders (not a K8s ConfigMap): simpler
 ## Phase 2 — Observability
 
 - Prometheus metrics on `:9090/metrics`: build duration, last build timestamp, build success/failure counter (NFR-OBS-1)
-- `prometheus.io/scrape`, `prometheus.io/port`, `prometheus.io/path` Pod annotations so VictoriaMetrics's existing `kubernetes-pods` scrape job picks it up automatically — same pattern as `dex` in Ocean (NFR-OBS-2). The pod's `app` label becomes the metric `job` label after scraping; it does not control whether scraping happens.
-- Grafana dashboard (follow Ocean pattern: ConfigMap with `grafana_dashboard: "1"`)
+- `prometheus.io/scrape`, `prometheus.io/port`, `prometheus.io/path` Pod annotations so VictoriaMetrics's existing `kubernetes-pods` scrape job picks it up automatically (NFR-OBS-2). The pod's `app` label becomes the metric `job` label after scraping; it does not control whether scraping happens.
+- Grafana dashboard (ConfigMap with `grafana_dashboard: "1"`)
 
 **Trigger:** after Phase 1 is deployed and stable.
 
@@ -50,8 +50,6 @@ Two paths, neither available today:
 ## Deferred — DataviewJS pre-rendering
 
 Build a custom Quartz transformer plugin that pre-renders `dataviewjs` code blocks at build time using a Node.js `vm` shim backed by the vault's frontmatter index. Scoped to frontmatter-driven queries only.
-
-Full concept documented in SecondBrain vault `Inbox/dataviewjs-static-prerender.md`.
 
 **Trigger:** personal need for DataviewJS in the published site.
 
