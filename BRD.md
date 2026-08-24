@@ -142,11 +142,13 @@ Vault git repo (any host — SSH or HTTPS)
          Traefik ingress → Cloudflare Tunnel → Browser
 ```
 
+The daemon also exposes `:9090/metrics` (Prometheus text exposition format), scraped in-cluster by VictoriaMetrics via `prometheus.io/*` Pod annotations — not routed through Traefik/ingress (NFR-OBS-1, NFR-OBS-2).
+
 Component responsibilities:
 
 | Component | Responsibility | Writes to vault? |
 |---|---|---|
-| vault-publisher daemon | git poll, quartz build, atomic output swap | No |
+| vault-publisher daemon | git poll, quartz build, atomic output swap, expose `/metrics` | No |
 | Caddy sidecar | Serve `/site` over HTTP | No |
 | Traefik / ingress | TLS termination, routing | No |
 
@@ -194,6 +196,8 @@ Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Statu
 | NFR-BUILD-2 | Caddy SHALL never serve a partially-written build; the atomic rename (FR-BUILD-2) is the sole mechanism guaranteeing this. | Must | Planned |
 | NFR-BUILD-3 | The image SHALL include `node_modules` pre-installed; no `npm install` SHALL run at pod startup. | Must | Planned |
 | NFR-CFG-1 | The committed image and repo SHALL contain no personal identifiers (domains, hostnames, usernames, vault content). | Must | Planned |
+| NFR-OBS-1 | The daemon SHALL expose Prometheus-format metrics — build duration, last build timestamp, build success/failure counter — on `:9090/metrics`, unauthenticated. | Could | Planned |
+| NFR-OBS-2 | The Pod SHALL carry `prometheus.io/scrape`, `prometheus.io/port`, and `prometheus.io/path` annotations so VictoriaMetrics's existing annotation-based scrape job picks it up automatically; no dedicated ServiceMonitor or scrape config. | Could | Planned |
 
 ## 10. Data Requirements
 
@@ -211,6 +215,7 @@ Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Statu
 |---|---|
 | Git remote | SSH (preferred for private repos) or HTTPS; configured via `VAULT_REPO_URL` |
 | HTTP (served site) | Caddy listens on port 80 inside the Pod; Traefik ingress terminates TLS externally |
+| Metrics (Prometheus) | Daemon exposes `:9090/metrics` (text exposition format); scraped in-cluster only via `prometheus.io/*` pod annotations (NFR-OBS-1/2) — not routed through ingress |
 | CI | GitHub Actions `ci.yml`; publishes to `ghcr.io/<owner>/vault-publisher:latest` |
 
 ## 12. Security & Compliance Requirements
@@ -232,7 +237,7 @@ Minimum viable observability for initial deployment:
 | Last successful build | Logged; optionally written to `/site/.build-info` |
 | Pod liveness | Standard Kubernetes liveness probe (file existence check on `/site/index.html`) |
 
-Prometheus metrics and Grafana dashboards are deferred (see `next-steps.md`).
+Prometheus metrics are specified (NFR-OBS-1, NFR-OBS-2; Status: Planned, Phase 2 — see `next-steps.md`). A Grafana dashboard remains deferred.
 
 ## 14. Success Metrics / Acceptance Criteria
 

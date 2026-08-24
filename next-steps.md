@@ -24,9 +24,9 @@ Two options, not yet decided:
 
 ## Phase 2 — Observability
 
-- Prometheus metrics: build duration, last build timestamp, build success/failure counter
+- Prometheus metrics on `:9090/metrics`: build duration, last build timestamp, build success/failure counter (NFR-OBS-1)
+- `prometheus.io/scrape`, `prometheus.io/port`, `prometheus.io/path` Pod annotations so VictoriaMetrics's existing `kubernetes-pods` scrape job picks it up automatically — same pattern as `dex` in Ocean (NFR-OBS-2). The pod's `app` label becomes the metric `job` label after scraping; it does not control whether scraping happens.
 - Grafana dashboard (follow Ocean pattern: ConfigMap with `grafana_dashboard: "1"`)
-- VictoriaMetrics scraping via pod `app` label relabeling
 
 **Trigger:** after Phase 1 is deployed and stable.
 
