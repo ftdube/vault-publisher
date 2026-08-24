@@ -1,0 +1,17 @@
+{
+  "name": "vault-publisher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Polls an Obsidian vault git repo, builds it as a static site with Quartz, and persists the output for a Caddy sidecar to serve.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/daemon.js"
+  },
+  "dependencies": {
+    "@jackyzha0/quartz": "github:jackyzha0/quartz#v5"
+  }
+}
