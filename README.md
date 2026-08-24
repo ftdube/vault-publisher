@@ -2,7 +2,7 @@
 
 A self-contained Docker daemon that builds an Obsidian vault as a static site using [Quartz](https://quartz.jzhao.xyz/) whenever a [`git-sync`](https://github.com/kubernetes/git-sync) sidecar pulls a change, and serves it via a Caddy sidecar — no CronJob orchestration, no manual rebuild triggers.
 
-> **Note:** the git-sync sidecar split described below is a proposed architecture (BRD §8, §9.2) — not yet implemented. See `next-steps.md`.
+> **Note:** this image has never been built or run end-to-end against a real `git-sync` sidecar — see `next-steps.md`'s Verify item.
 
 ## How it works
 

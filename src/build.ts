@@ -8,8 +8,6 @@ const QUARTZ_BIN = path.join(APP_ROOT, "node_modules/.bin/quartz")
 const CONFIG_TEMPLATE = path.join(APP_ROOT, "quartz.config.yaml")
 const CONFIG_DEST = path.join(QUARTZ_PKG_DIR, "quartz.config.yaml")
 
-// git-sync maintains this symlink; the daemon reads through it, never /vault directly.
-const VAULT_CURRENT_DIR = "/vault/current"
 const SITE_DIR = "/site"
 const SITE_NEXT_DIR = "/site-next"
 const SITE_OLD_DIR = "/site-old"
@@ -64,9 +62,11 @@ export async function substituteConfig(): Promise<void> {
 
 // FR-BUILD-1: run from inside the installed quartz package directory — quartz
 // resolves its own build scripts and config relative to cwd, not install path.
-export function runQuartzBuild(): Promise<number | null> {
+// vaultDir must be a resolved, concrete path (see vault.ts's readVaultCurrentRef), not
+// a live symlink — pins the build to one snapshot even if git-sync resyncs mid-build.
+export function runQuartzBuild(vaultDir: string): Promise<number | null> {
   return new Promise((resolve) => {
-    const child = spawn(QUARTZ_BIN, ["build", "-d", VAULT_CURRENT_DIR, "--output", SITE_NEXT_DIR], {
+    const child = spawn(QUARTZ_BIN, ["build", "-d", vaultDir, "--output", SITE_NEXT_DIR], {
       cwd: QUARTZ_PKG_DIR,
       stdio: ["ignore", "inherit", "inherit"],
     })

@@ -30,7 +30,7 @@ Remaining, not yet done (needs a real git-sync sidecar to verify against, and th
 
 | Item | Notes |
 |---|---|
-| Add `registry.k8s.io/git-sync/git-sync` to K8s deployment docs, pinned tag | Folds into Phase 1's still-Planned "K8s deployment docs" item; pinning addresses RISK-8 |
+| Add `registry.k8s.io/git-sync/git-sync` to K8s deployment docs, pinned tag, with rev-retention configured longer than the slowest expected build | Folds into Phase 1's still-Planned "K8s deployment docs" item; pinning addresses RISK-8, retention addresses RISK-9 |
 | Verify end-to-end against a real git-sync sidecar | See "Verify — build and run the actual image" above; unit tests only cover `readVaultCurrentRef` against a synthetic symlink, not a real git-sync process |
 
 ### Configurable trigger mode: webhook vs poll

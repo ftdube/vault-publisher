@@ -34,7 +34,7 @@ async function pollOnce(): Promise<void> {
 
   log(`Vault changed: ${lastBuiltRef ?? "(none)"} -> ${currentRef}, rebuilding`)
   await substituteConfig()
-  const exitCode = await runQuartzBuild()
+  const exitCode = await runQuartzBuild(currentRef)
 
   if (exitCode === 0) {
     promoteSiteNext()
