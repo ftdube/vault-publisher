@@ -1,4 +1,5 @@
 import { log, logError } from "./log.js"
+import { requireEnv } from "./env.js"
 import { isVaultCloned, cloneVault, fetchVault, remoteHeadSha, syncToRemote } from "./git.js"
 import {
   substituteConfig,
@@ -13,26 +14,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function requireEnv(name: string): string {
-  const value = process.env[name]
-  if (!value) {
-    logError(`${name} is required`)
-    process.exit(1)
-  }
-  return value
-}
-
-// FR-CFG-1: required site parameters come from the environment, never baked into the image.
-const repoUrl = requireEnv("VAULT_REPO_URL")
-requireEnv("QUARTZ_BASE_URL")
-const branch = process.env.VAULT_BRANCH || "main"
-const pollIntervalSeconds = Number.parseInt(process.env.POLL_INTERVAL || "300", 10)
-
 // FR-BUILD-2/FR-BUILD-3, G3: the last successfully built SHA persists in /site/.build-info,
 // so a pod restart doesn't force a rebuild when the vault hasn't actually changed.
-let lastBuiltSha = readLastBuiltSha()
+let lastBuiltSha: string | null = null
 
-async function pollOnce(): Promise<void> {
+async function pollOnce(repoUrl: string, branch: string): Promise<void> {
   if (!isVaultCloned()) {
     log(`Cloning ${repoUrl} (branch ${branch}) to /vault`)
     await cloneVault(repoUrl, branch)
@@ -68,10 +54,18 @@ async function pollOnce(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // FR-CFG-1: required site parameters come from the environment, never baked into the image.
+  const repoUrl = requireEnv("VAULT_REPO_URL")
+  requireEnv("QUARTZ_BASE_URL")
+  const branch = process.env.VAULT_BRANCH || "main"
+  const pollIntervalSeconds = Number.parseInt(process.env.POLL_INTERVAL || "300", 10)
+
+  lastBuiltSha = readLastBuiltSha()
+
   log(`vault-publisher starting: repo=${repoUrl} branch=${branch} pollInterval=${pollIntervalSeconds}s`)
   for (;;) {
     try {
-      await pollOnce()
+      await pollOnce(repoUrl, branch)
     } catch (err) {
       // FR-POLL-5: any unexpected failure is logged and retried, never fatal.
       const message = err instanceof Error ? err.message : String(err)
@@ -81,4 +75,7 @@ async function main(): Promise<void> {
   }
 }
 
-main()
+// Only run the loop when this file is the invoked entrypoint, not when imported (e.g. by tests).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main()
+}

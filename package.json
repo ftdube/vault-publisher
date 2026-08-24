@@ -10,6 +10,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/*.test.ts",
     "start": "node dist/daemon.js"
   },
   "dependencies": {
@@ -17,6 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
 }
