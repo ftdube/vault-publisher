@@ -8,7 +8,7 @@ const QUARTZ_BIN = path.join(APP_ROOT, "node_modules/.bin/quartz")
 const CONFIG_TEMPLATE = path.join(APP_ROOT, "quartz.config.yaml")
 const CONFIG_DEST = path.join(QUARTZ_PKG_DIR, "quartz.config.yaml")
 
-// git-sync (BRD §9.2) maintains this symlink; the daemon reads through it, never /vault directly.
+// git-sync maintains this symlink; the daemon reads through it, never /vault directly.
 const VAULT_CURRENT_DIR = "/vault/current"
 const SITE_DIR = "/site"
 const SITE_NEXT_DIR = "/site-next"

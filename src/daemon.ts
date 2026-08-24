@@ -18,8 +18,8 @@ function sleep(ms: number): Promise<void> {
 // so a pod restart doesn't force a rebuild when the vault hasn't actually changed.
 let lastBuiltRef: string | null = null
 
-// FR-BUILD-7: vault sync itself is owned by the git-sync sidecar (BRD §9.2); this only
-// detects a change by reading the /vault/current symlink it maintains.
+// FR-BUILD-7: vault sync itself is owned by the git-sync sidecar; this only detects
+// a change by reading the /vault/current symlink it maintains.
 async function pollOnce(): Promise<void> {
   const currentRef = readVaultCurrentRef()
   if (currentRef === null) {
