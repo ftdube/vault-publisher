@@ -1,8 +1,9 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { log, logError } from "./log.js"
+import { log, logError } from "../src/log.js"
 
-test("log writes a timestamped line to stdout", () => {
+// BRD §13 Observability: build success/failure SHALL be logged to stdout with a timestamp.
+test("§13: log writes a timestamped line to stdout", () => {
   const calls: string[] = []
   const original = console.log
   console.log = (msg: string) => calls.push(msg)
@@ -15,7 +16,8 @@ test("log writes a timestamped line to stdout", () => {
   assert.match(calls[0], /^\[\d{4}-\d{2}-\d{2}T.*Z\] hello$/)
 })
 
-test("logError writes a timestamped line to stderr", () => {
+// BRD §13 Observability: failures SHALL be logged the same way, to stderr.
+test("§13: logError writes a timestamped line to stderr", () => {
   const calls: string[] = []
   const original = console.error
   console.error = (msg: string) => calls.push(msg)

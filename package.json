@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/*.test.ts",
+    "test": "tsx --test tests/*.test.ts",
     "start": "node dist/daemon.js"
   },
   "dependencies": {
