@@ -56,15 +56,16 @@ jobs:
 
   build:
     needs: [typecheck, test, scan]
-    runs-on: ubuntu-latest
+    # Native arm64 runner: the only deploy target (RPi5) is arm64, and this
+    # avoids QEMU-emulating the plugin pre-bake's native compilation (sharp,
+    # tsup) — that emulation was most of what made this job so slow.
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
 
     steps:
       - uses: actions/checkout@v4
-
-      - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
 
@@ -78,7 +79,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/arm64,linux/amd64
+          platforms: linux/arm64
           push: ${{ github.event_name == 'push' }}
           tags: |
             ${{ env.IMAGE }}:latest
