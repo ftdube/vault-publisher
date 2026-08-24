@@ -21,3 +21,4 @@ Self-contained daemon that polls an Obsidian vault git repo, builds it as a stat
 - the image build logs `✗ Failed to install plugin` for `canvas-page`/`bases-page`/`note-properties` — confirmed harmless (a `tsup` DTS-generation-only failure); the plugins' JS still builds and works. See `agent-archive.md`
 - SSH deploy key must be mounted `0400`; the default K8s Secret mode (`0644`) is rejected by SSH
 - `POLL_INTERVAL` paces `git fetch`, not builds — a build only fires when the remote HEAD differs from local HEAD
+- **Proposed, not yet implemented:** a `git-sync` sidecar takes over vault clone/fetch/SSH-key handling from the daemon, which becomes read-only on `/vault` — see BRD §9.2 and `next-steps.md` Phase 1.5 before assuming the above git-handling rules still apply

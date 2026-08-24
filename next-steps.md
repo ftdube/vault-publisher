@@ -9,7 +9,7 @@
 | Default `quartz.config.yaml` with env var placeholders | Implemented | Baked into image (decided — see below) |
 | CI: `ci.yml` (typecheck/test/scan/build/push) to GHCR | Implemented | "lint" renamed to "typecheck" — there's no ESLint config, just `tsc --noEmit` |
 | Unit tests: `src/*.test.ts` via `node:test` (through `tsx`, not compiled) | Implemented | Covers `env.ts`/`log.ts`/`build.ts`'s `substituteConfig`. Path-coupled logic (`git.ts`, rename/build-info in `build.ts`) needs real `/vault`/`/site` — left to the Docker-based Verify item below, not unit-tested |
-| K8s deployment docs: two-container Pod, hostPath, nodeSelector | Planned | |
+| K8s deployment docs: three-container Pod (git-sync, builder, Caddy), hostPath, nodeSelector | Planned | Container count depends on Phase 1.5 (git-sync sidecar) landing first |
 | Health check for the served site | Planned | Every new service gets a Gatus (or equivalent) check once deployed |
 
 ## Verify — build and run the actual image
@@ -22,11 +22,35 @@ The daemon and Dockerfile were written and the underlying quartz invocation was 
 
 Baked into the image with `envsubst` placeholders (not a K8s ConfigMap): simpler, works out of the box. FR-CFG-3 still allows an operator to mount a custom `quartz.config.yaml` over the baked-in default for full control.
 
+## Phase 1.5 — git-sync sidecar (proposed, not yet implemented)
+
+Delegates vault cloning/pulling from the daemon to a `git-sync` sidecar (BRD §8, §9.2, v0.3). The daemon narrows to: read `/vault/current`, quartz build, atomic promote — no git access, no SSH key, `/vault` mounted read-only.
+
+Work items when this lands:
+
+| Item | Notes |
+|---|---|
+| Remove clone/fetch/SSH-key code from the daemon | Was FR-POLL-1/2/4/5; superseded by git-sync (FR-SYNC-1..5) |
+| Update build invocation's `-d` path | `/vault` → `/vault/current` (FR-BUILD-1) |
+| Drop `git`/`openssh-client` from the daemon's final Dockerfile stage | git-sync's own image carries them; daemon keeps `gettext-base` for `envsubst` |
+| Add `registry.k8s.io/git-sync/git-sync` to K8s deployment docs, pinned tag | Folds into Phase 1's still-Planned "K8s deployment docs" item; pinning addresses RISK-8 |
+| Rename test names `FR-POLL-*` → `FR-SYNC-*`/`FR-BUILD-7` | Per `agent-archive.md`'s FR/NFR traceability convention |
+| Update `agents.md` hard rules/gotchas for the new container split | |
+
+**Trigger:** BRD v0.3 approved as the target architecture.
+
+### Configurable trigger mode: webhook vs poll
+
+Default is self-poll (FR-BUILD-7): the daemon reads `/vault/current` on `POLL_INTERVAL`. Add a K8s-configurable option — e.g. `SYNC_TRIGGER_MODE=poll|webhook` on the daemon, default `poll` — to instead have git-sync push a webhook call to the daemon after each successful sync (its `--webhook-url` flag) for near-instant builds instead of `POLL_INTERVAL`-bounded latency (FR-BUILD-8). Needs: a small HTTP listener in the daemon, a shared secret/token for the inbound call (git-sync's `--webhook-url` has no built-in auth of its own), and a decision on what port it listens on (separate from `:9090/metrics`).
+
+**Trigger:** an operator wants sub-`POLL_INTERVAL` build latency, or the git-sync sidecar phase above is stable and this becomes worth the added listener surface.
+
 ## Phase 2 — Observability
 
 - Prometheus metrics on `:9090/metrics`: build duration, last build timestamp, build success/failure counter (NFR-OBS-1)
 - `prometheus.io/scrape`, `prometheus.io/port`, `prometheus.io/path` Pod annotations so VictoriaMetrics's existing `kubernetes-pods` scrape job picks it up automatically (NFR-OBS-2). The pod's `app` label becomes the metric `job` label after scraping; it does not control whether scraping happens.
 - Grafana dashboard (ConfigMap with `grafana_dashboard: "1"`)
+- Whether to also scrape git-sync's own sync-duration/failure metrics, once Phase 1.5 lands — deferred out of the BRD v0.3 pass deliberately, revisit here
 
 **Trigger:** after Phase 1 is deployed and stable.
 
