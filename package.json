@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Polls an Obsidian vault git repo, builds it as a static site with Quartz, and persists the output for a Caddy sidecar to serve.",
+  "description": "Builds an Obsidian vault as a static site with Quartz whenever a git-sync sidecar syncs a change, and persists the output for a Caddy sidecar to serve.",
   "license": "MIT",
   "engines": {
     "node": ">=22"

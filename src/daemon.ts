@@ -1,63 +1,56 @@
 import { log, logError } from "./log.js"
 import { requireEnv } from "./env.js"
-import { isVaultCloned, cloneVault, fetchVault, remoteHeadSha, syncToRemote } from "./git.js"
+import { readVaultCurrentRef } from "./vault.js"
 import {
   substituteConfig,
   runQuartzBuild,
   promoteSiteNext,
   discardSiteNext,
   writeBuildInfo,
-  readLastBuiltSha,
+  readLastBuiltRef,
 } from "./build.js"
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// FR-BUILD-2/FR-BUILD-3, G3: the last successfully built SHA persists in /site/.build-info,
+// FR-BUILD-2/FR-BUILD-3, G3: the last successfully built ref persists in /site/.build-info,
 // so a pod restart doesn't force a rebuild when the vault hasn't actually changed.
-let lastBuiltSha: string | null = null
+let lastBuiltRef: string | null = null
 
-async function pollOnce(repoUrl: string, branch: string): Promise<void> {
-  if (!isVaultCloned()) {
-    log(`Cloning ${repoUrl} (branch ${branch}) to /vault`)
-    await cloneVault(repoUrl, branch)
-  } else {
-    const fetch = await fetchVault(branch)
-    if (fetch.code !== 0) {
-      // FR-POLL-5: log and retry next cycle, never crash the daemon.
-      logError(`git fetch failed, will retry next cycle: ${fetch.stderr}`)
-      return
-    }
-  }
-
-  const headSha = await remoteHeadSha(branch)
-  if (headSha === lastBuiltSha) {
-    log(`Up to date (${headSha})`)
+// FR-BUILD-7: vault sync itself is owned by the git-sync sidecar (BRD §9.2); this only
+// detects a change by reading the /vault/current symlink it maintains.
+async function pollOnce(): Promise<void> {
+  const currentRef = readVaultCurrentRef()
+  if (currentRef === null) {
+    log("Waiting for git-sync's first sync (/vault/current not present yet)")
     return
   }
 
-  log(`HEAD changed: ${lastBuiltSha ?? "(none)"} -> ${headSha}, rebuilding`)
-  await syncToRemote(branch)
+  if (currentRef === lastBuiltRef) {
+    log(`Up to date (${currentRef})`)
+    return
+  }
+
+  log(`Vault changed: ${lastBuiltRef ?? "(none)"} -> ${currentRef}, rebuilding`)
   await substituteConfig()
   const exitCode = await runQuartzBuild()
 
   if (exitCode === 0) {
     promoteSiteNext()
-    writeBuildInfo(headSha)
-    lastBuiltSha = headSha
-    log(`Build succeeded, published ${headSha}`)
+    writeBuildInfo(currentRef)
+    lastBuiltRef = currentRef
+    log(`Build succeeded, published ${currentRef}`)
   } else {
     discardSiteNext()
-    logError(`Build failed (exit ${exitCode}), /site left unchanged at ${lastBuiltSha ?? "(none)"}`)
+    logError(`Build failed (exit ${exitCode}), /site left unchanged at ${lastBuiltRef ?? "(none)"}`)
   }
 }
 
 async function main(): Promise<void> {
-  // FR-CFG-1: required site parameters come from the environment, never baked into the image.
-  const repoUrl = requireEnv("VAULT_REPO_URL")
+  // FR-CFG-1: site parameters come from the environment, never baked into the image.
+  // VAULT_REPO_URL/VAULT_BRANCH/SSH_KEY_PATH belong to the git-sync sidecar now, not this daemon.
   requireEnv("QUARTZ_BASE_URL")
-  const branch = process.env.VAULT_BRANCH || "main"
   const DEFAULT_POLL_INTERVAL_SECONDS = 300
   const parsedPollInterval = Number.parseInt(process.env.POLL_INTERVAL || "", 10)
   const pollIntervalSeconds =
@@ -68,14 +61,14 @@ async function main(): Promise<void> {
     logError(`Invalid POLL_INTERVAL "${process.env.POLL_INTERVAL}", falling back to ${DEFAULT_POLL_INTERVAL_SECONDS}s`)
   }
 
-  lastBuiltSha = readLastBuiltSha()
+  lastBuiltRef = readLastBuiltRef()
 
-  log(`vault-publisher starting: repo=${repoUrl} branch=${branch} pollInterval=${pollIntervalSeconds}s`)
+  log(`vault-publisher starting: pollInterval=${pollIntervalSeconds}s`)
   for (;;) {
     try {
-      await pollOnce(repoUrl, branch)
+      await pollOnce()
     } catch (err) {
-      // FR-POLL-5: any unexpected failure is logged and retried, never fatal.
+      // FR-SYNC-4-adjacent: any unexpected failure is logged and retried, never fatal.
       const message = err instanceof Error ? err.message : String(err)
       logError(`Poll cycle failed, will retry next cycle: ${message}`)
     }

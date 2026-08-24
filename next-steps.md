@@ -4,40 +4,34 @@
 
 | Item | Status | Notes |
 |---|---|---|
-| Daemon: git poll + conditional build + two-step rename | Implemented, untested end-to-end | TypeScript, `src/` compiled to `dist/`; see Verify item below |
-| Dockerfile: node:22-slim, git, `@jackyzha0/quartz` git dep, pre-baked plugins | Builds successfully in CI; daemon untested end-to-end | See Verify item below |
+| Daemon: `/vault/current` change detection (git-sync-owned symlink) + conditional build + two-step rename | Implemented, untested end-to-end | TypeScript, `src/` compiled to `dist/`; see Verify item below. No git/SSH code in the daemon anymore — see Phase 1.5 |
+| Dockerfile: node:22-slim, `@jackyzha0/quartz` git dep, pre-baked plugins | Builds successfully in CI (image build); daemon untested end-to-end | See Verify item below. `git`/`openssh-client` dropped from the final stage (git-sync sidecar owns git now) |
 | Default `quartz.config.yaml` with env var placeholders | Implemented | Baked into image (decided — see below) |
 | CI: `ci.yml` (typecheck/test/scan/build/push) to GHCR | Implemented | "lint" renamed to "typecheck" — there's no ESLint config, just `tsc --noEmit` |
-| Unit tests: `src/*.test.ts` via `node:test` (through `tsx`, not compiled) | Implemented | Covers `env.ts`/`log.ts`/`build.ts`'s `substituteConfig`. Path-coupled logic (`git.ts`, rename/build-info in `build.ts`) needs real `/vault`/`/site` — left to the Docker-based Verify item below, not unit-tested |
+| Unit tests: `src/*.test.ts` via `node:test` (through `tsx`, not compiled) | Implemented | Covers `env.ts`/`log.ts`/`build.ts`'s `substituteConfig`/`vault.ts`'s `readVaultCurrentRef` (real symlinks in a tmpdir). Rename/build-info promotion in `build.ts` still needs real `/site` — left to the Docker-based Verify item below, not unit-tested |
 | K8s deployment docs: three-container Pod (git-sync, builder, Caddy), hostPath, nodeSelector | Planned | Container count depends on Phase 1.5 (git-sync sidecar) landing first |
 | Health check for the served site | Planned | Every new service gets a Gatus (or equivalent) check once deployed |
 
 ## Verify — build and run the actual image
 
-The daemon and Dockerfile were written and the underlying quartz invocation was verified manually (real `npm install` of the git dependency, real `quartz build` against an external content dir, real plugin pre-bake, real `envsubst` run) — but Docker wasn't running in the environment that wrote this code, so the image itself has never been built or run, and the daemon's poll loop has never executed end-to-end. `/vault`, `/site`, `/site-next` are hardcoded absolute paths, so this can only be tested in a container, not on a bare host.
+The daemon and Dockerfile were written and the underlying quartz invocation was verified manually (real `npm install` of the git dependency, real `quartz build` against an external content dir, real plugin pre-bake, real `envsubst` run) — but Docker wasn't running in the environment that wrote this code, so the image itself has never been built or run, and the daemon's poll loop has never executed end-to-end. `/vault/current`, `/site`, `/site-next` are hardcoded absolute paths, so this can only be tested in a container (with a real git-sync sidecar populating `/vault/current`), not on a bare host.
 
-**Trigger:** before first real deployment — `docker build`, then `docker run` against a real (even tiny) vault repo and confirm a site actually gets published to `/site`.
+**Trigger:** before first real deployment — `docker build`, then `docker run` alongside a `git-sync` sidecar against a real (even tiny) vault repo and confirm a site actually gets published to `/site`.
 
 ## quartz.config.yaml delivery — decided
 
 Baked into the image with `envsubst` placeholders (not a K8s ConfigMap): simpler, works out of the box. FR-CFG-3 still allows an operator to mount a custom `quartz.config.yaml` over the baked-in default for full control.
 
-## Phase 1.5 — git-sync sidecar (proposed, not yet implemented)
+## Phase 1.5 — git-sync sidecar
 
-Delegates vault cloning/pulling from the daemon to a `git-sync` sidecar (BRD §8, §9.2, v0.3). The daemon narrows to: read `/vault/current`, quartz build, atomic promote — no git access, no SSH key, `/vault` mounted read-only.
+Delegates vault cloning/pulling from the daemon to a `git-sync` sidecar (BRD §8, §9.2, v0.3). The daemon's side is implemented: it reads `/vault/current`, builds, atomically promotes — no git code, no SSH key, no `VAULT_REPO_URL`/`VAULT_BRANCH` in the daemon at all (`git.ts` deleted, `src/vault.ts` added). `Dockerfile`'s final stage no longer installs `git`/`openssh-client`.
 
-Work items when this lands:
+Remaining, not yet done (needs a real git-sync sidecar to verify against, and this repo doesn't own K8s manifests yet):
 
 | Item | Notes |
 |---|---|
-| Remove clone/fetch/SSH-key code from the daemon | Was FR-POLL-1/2/4/5; superseded by git-sync (FR-SYNC-1..5) |
-| Update build invocation's `-d` path | `/vault` → `/vault/current` (FR-BUILD-1) |
-| Drop `git`/`openssh-client` from the daemon's final Dockerfile stage | git-sync's own image carries them; daemon keeps `gettext-base` for `envsubst` |
 | Add `registry.k8s.io/git-sync/git-sync` to K8s deployment docs, pinned tag | Folds into Phase 1's still-Planned "K8s deployment docs" item; pinning addresses RISK-8 |
-| Rename test names `FR-POLL-*` → `FR-SYNC-*`/`FR-BUILD-7` | Per `agent-archive.md`'s FR/NFR traceability convention |
-| Update `agents.md` hard rules/gotchas for the new container split | |
-
-**Trigger:** BRD v0.3 approved as the target architecture.
+| Verify end-to-end against a real git-sync sidecar | See "Verify — build and run the actual image" above; unit tests only cover `readVaultCurrentRef` against a synthetic symlink, not a real git-sync process |
 
 ### Configurable trigger mode: webhook vs poll
 

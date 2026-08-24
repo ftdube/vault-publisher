@@ -5,8 +5,8 @@
 | Field | Value |
 |---|---|
 | Document title | Business Requirements Document — vault-publisher |
-| Document version | 0.3 (Draft) |
-| System version documented | MVP implemented, untested end-to-end. §8/§9.2 describe a proposed git-sync sidecar architecture, not yet implemented — see `next-steps.md`. |
+| Document version | 0.4 (Draft) |
+| System version documented | Daemon side of the git-sync sidecar architecture implemented, untested end-to-end (`next-steps.md` Verify item). §9.2's FR-SYNC-* (the git-sync sidecar itself, and K8s manifests) remain Planned — this repo has no K8s manifests yet. |
 | Date | 2026-08-24 |
 | Author | Claude Code, on behalf of the repository owner |
 | Classification | Public |
@@ -19,6 +19,7 @@
 | 0.1 | 2026-07-28 | Initial draft. Pre-implementation; all requirements are Planned. |
 | 0.2 | 2026-08-24 | MUST-priority FRs implemented (`src/`, `Dockerfile`, `quartz.config.yaml`, `package.json`). Corrected several premises found wrong during implementation: quartz is `@jackyzha0/quartz` via a git-ref dependency, not an npm-registry package; its build must run with cwd inside `node_modules/@jackyzha0/quartz`, not the app root; `QUARTZ_SHORT_NAME`/PWA manifest support doesn't exist in unpatched quartz, dropped; `rename(2)` can't replace a non-empty directory, so promotion is a two-step rename (RISK-6). Not yet built or run as a container — see `next-steps.md`. |
 | 0.3 | 2026-08-24 | Proposed architecture change (docs only, no code yet): vault git cloning/pulling is delegated from the daemon to a dedicated `git-sync` sidecar (§8, §9.2). The daemon narrows to detecting a local checkout change and running the build; it no longer touches git, `VAULT_REPO_URL`, or the SSH deploy key at all. FR-POLL-* superseded by FR-SYNC-* (§9.2); FR-BUILD-1's `-d` path changes from `/vault` to `/vault/current`; `/vault` becomes daemon-read-only. `POLL_INTERVAL` now paces the daemon's local checkout check, not a network fetch — `VAULT_SYNC_PERIOD` is a new, separate var pacing git-sync's own fetch cadence. Default change-detection is self-poll (daemon reads git-sync's `current` symlink); a configurable webhook-push alternative is deferred (`next-steps.md`). See Appendix B for why this doesn't repeat the three-moving-parts problem §2 describes. |
+| 0.4 | 2026-08-24 | Daemon side of v0.3 implemented: `src/git.ts` deleted; `src/vault.ts` added (`readVaultCurrentRef`, unit-tested against real symlinks); `src/build.ts`'s build path is `/vault/current`; `src/daemon.ts` no longer requires `VAULT_REPO_URL`/`VAULT_BRANCH`, has no SSH access, and detects changes via the symlink instead of `git fetch`. `Dockerfile`'s final stage drops `git`/`openssh-client`. Typecheck and unit tests pass; Docker build/run is still unverified end-to-end (no Docker daemon available in this environment — same gap `next-steps.md` already tracked pre-v0.3). FR-SYNC-1..5 (the git-sync sidecar container itself, and K8s manifests) remain Planned — out of this repo's code. |
 
 ### Approval
 
@@ -188,20 +189,20 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
-| FR-BUILD-1 | From within `node_modules/@jackyzha0/quartz` (quartz resolves its own build scripts and config relative to `process.cwd()`, not its install path), the daemon SHALL invoke `quartz build -d /vault/current --output /site-next`. (v0.2: `-d /vault`, before vault sync moved to a git-sync sidecar — see §9.2.) | Must | Implemented (path change: Planned) |
+| FR-BUILD-1 | From within `node_modules/@jackyzha0/quartz` (quartz resolves its own build scripts and config relative to `process.cwd()`, not its install path), the daemon SHALL invoke `quartz build -d /vault/current --output /site-next`. (v0.2: `-d /vault`, before vault sync moved to a git-sync sidecar — see §9.2.) | Must | Implemented |
 | FR-BUILD-2 | On build success, the daemon SHALL promote `/site-next` to `/site`. `rename(2)` cannot replace a non-empty directory (`ENOTEMPTY`, confirmed by test), so promotion after the first build is two renames — `/site` → `/site-old`, then `/site-next` → `/site` — with `/site-old` removed after. See RISK-6. | Must | Implemented |
 | FR-BUILD-3 | On build failure, `/site` SHALL remain unchanged (the previous successful build continues to be served). | Must | Implemented |
 | FR-BUILD-4 | Before invoking quartz, the daemon SHALL substitute env var placeholders in `quartz.config.yaml` using `envsubst`. | Must | Implemented |
 | FR-BUILD-5 | A build SHALL also be triggered on the first startup even if `/vault` already exists and HEAD has not changed, to ensure `/site` is populated after a config change. | Should | Planned |
 | FR-BUILD-6 | A build SHOULD be incremental, rebuilding only files changed since the last build, once quartz supports this for a one-shot (non-watch) invocation. Until then, every build is a full rebuild (FR-BUILD-1). See `next-steps.md` Phase 3. | Could | Blocked |
-| FR-BUILD-7 | On each `POLL_INTERVAL` tick, the daemon SHALL read the target of `/vault/current` (or its resolved commit) and compare it to the value at its last build; a build (FR-BUILD-1) SHALL fire only when it differs. This replaces v0.2's `git fetch`-based change detection (FR-POLL-2) now that sync is external (§9.2). | Must | Planned |
+| FR-BUILD-7 | On each `POLL_INTERVAL` tick, the daemon SHALL read the target of `/vault/current` (or its resolved commit) and compare it to the value at its last build; a build (FR-BUILD-1) SHALL fire only when it differs. This replaces v0.2's `git fetch`-based change detection (FR-POLL-2) now that sync is external (§9.2). | Must | Implemented (`src/vault.ts`) |
 | FR-BUILD-8 | The daemon MAY be configured to trigger a build via an inbound webhook call from git-sync instead of polling `/vault/current` (FR-BUILD-7), for near-instant builds instead of `POLL_INTERVAL`-bounded latency. Deferred — see `next-steps.md`. | Could | Planned |
 
 ### 9.4 Configuration (`CFG`)
 
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
-| FR-CFG-1 | All site-specific parameters (`QUARTZ_BASE_URL`, `QUARTZ_PAGE_TITLE`) SHALL be injected via environment variables into the daemon container, not baked into the image. Vault-access parameters (`VAULT_REPO_URL`, `VAULT_BRANCH`, `SSH_KEY_PATH`, `VAULT_SYNC_PERIOD`) are injected the same way into the git-sync container instead (§9.2) — the daemon no longer receives them. | Must | Implemented (env split: Planned) |
+| FR-CFG-1 | All site-specific parameters (`QUARTZ_BASE_URL`, `QUARTZ_PAGE_TITLE`) SHALL be injected via environment variables into the daemon container, not baked into the image. Vault-access parameters (`VAULT_REPO_URL`, `VAULT_BRANCH`, `SSH_KEY_PATH`, `VAULT_SYNC_PERIOD`) are injected the same way into the git-sync container instead (§9.2) — the daemon no longer receives them. | Must | Implemented |
 | FR-CFG-2 | A default `quartz.config.yaml` SHALL be included in the image, with `${QUARTZ_*}` placeholders, covering a working general-purpose Quartz configuration. | Must | Implemented |
 | FR-CFG-3 | Operators MAY override the default config by mounting a custom `quartz.config.yaml` at the app root. | Should | Planned |
 
@@ -245,7 +246,7 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 | NFR-SEC-2 | The git-sync sidecar SHALL NOT push to the vault repo; it clones/pulls only. Nothing else in the Pod has git access. | Must | Planned |
 | NFR-SEC-3 | No personal identifiers SHALL be committed to this repository (see C1). | Must | Planned |
 | NFR-SEC-4 | The built static site is unauthenticated by design; access control is the ingress layer's responsibility. | Must | Planned |
-| NFR-SEC-5 | The daemon container SHALL have no access to the SSH deploy key or any git credential, and SHALL mount `/vault` read-only. | Must | Planned |
+| NFR-SEC-5 | The daemon container SHALL have no access to the SSH deploy key or any git credential, and SHALL mount `/vault` read-only. | Must | Implemented (code has no git/SSH access; the read-only mount itself is a K8s manifest concern, still Planned) |
 
 ## 13. Observability & Monitoring Requirements
 
