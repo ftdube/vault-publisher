@@ -15,11 +15,15 @@ RUN mkdir -p /tmp/seed-content \
     && node ./quartz/bootstrap-cli.mjs build -d /tmp/seed-content --output /tmp/seed-output \
     && rm -rf /tmp/seed-content /tmp/seed-output
 
+COPY tsconfig.json ./
+COPY src/ ./src/
+RUN npm run build && npm prune --omit=dev
+
 FROM node:22-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client gettext-base \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/src/app
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY package.json quartz.config.yaml ./
-COPY src/ ./src/
-ENTRYPOINT ["node", "src/daemon.js"]
+COPY --from=builder /usr/src/app/dist ./dist
+ENTRYPOINT ["node", "dist/daemon.js"]

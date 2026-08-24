@@ -9,9 +9,14 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node src/daemon.js"
+    "build": "tsc",
+    "start": "node dist/daemon.js"
   },
   "dependencies": {
     "@jackyzha0/quartz": "github:jackyzha0/quartz#v5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
   }
 }

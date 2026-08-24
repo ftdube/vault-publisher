@@ -9,29 +9,30 @@ import {
   readLastBuiltSha,
 } from "./build.js"
 
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    logError(`${name} is required`)
+    process.exit(1)
+  }
+  return value
+}
+
 // FR-CFG-1: required site parameters come from the environment, never baked into the image.
-const repoUrl = process.env.VAULT_REPO_URL
+const repoUrl = requireEnv("VAULT_REPO_URL")
+requireEnv("QUARTZ_BASE_URL")
 const branch = process.env.VAULT_BRANCH || "main"
 const pollIntervalSeconds = Number.parseInt(process.env.POLL_INTERVAL || "300", 10)
-
-if (!repoUrl) {
-  logError("VAULT_REPO_URL is required")
-  process.exit(1)
-}
-if (!process.env.QUARTZ_BASE_URL) {
-  logError("QUARTZ_BASE_URL is required")
-  process.exit(1)
-}
 
 // FR-BUILD-2/FR-BUILD-3, G3: the last successfully built SHA persists in /site/.build-info,
 // so a pod restart doesn't force a rebuild when the vault hasn't actually changed.
 let lastBuiltSha = readLastBuiltSha()
 
-async function pollOnce() {
+async function pollOnce(): Promise<void> {
   if (!isVaultCloned()) {
     log(`Cloning ${repoUrl} (branch ${branch}) to /vault`)
     await cloneVault(repoUrl, branch)
@@ -66,15 +67,15 @@ async function pollOnce() {
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   log(`vault-publisher starting: repo=${repoUrl} branch=${branch} pollInterval=${pollIntervalSeconds}s`)
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  for (;;) {
     try {
       await pollOnce()
     } catch (err) {
       // FR-POLL-5: any unexpected failure is logged and retried, never fatal.
-      logError(`Poll cycle failed, will retry next cycle: ${err.message}`)
+      const message = err instanceof Error ? err.message : String(err)
+      logError(`Poll cycle failed, will retry next cycle: ${message}`)
     }
     await sleep(pollIntervalSeconds * 1000)
   }

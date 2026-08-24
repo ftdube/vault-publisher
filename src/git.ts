@@ -3,7 +3,13 @@ import { existsSync } from "node:fs"
 
 const VAULT_DIR = "/vault"
 
-function run(cmd, args, options = {}) {
+interface GitResult {
+  code: number | null
+  stdout: string
+  stderr: string
+}
+
+function run(cmd: string, args: string[], options: { env?: NodeJS.ProcessEnv } = {}): Promise<GitResult> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { ...options, stdio: ["ignore", "pipe", "pipe"] })
     let stdout = ""
@@ -16,7 +22,7 @@ function run(cmd, args, options = {}) {
 }
 
 // FR-POLL-4: use the SSH deploy key when present, HTTPS otherwise.
-function gitEnv() {
+function gitEnv(): NodeJS.ProcessEnv {
   const sshKeyPath = process.env.SSH_KEY_PATH || "/ssh/id_ed25519"
   if (existsSync(sshKeyPath)) {
     return {
@@ -27,16 +33,16 @@ function gitEnv() {
   return process.env
 }
 
-function runVaultGit(args) {
+function runVaultGit(args: string[]): Promise<GitResult> {
   return run("git", ["-C", VAULT_DIR, ...args], { env: gitEnv() })
 }
 
-export function isVaultCloned() {
+export function isVaultCloned(): boolean {
   return existsSync(`${VAULT_DIR}/.git`)
 }
 
 // FR-POLL-1 (clone path)
-export async function cloneVault(repoUrl, branch) {
+export async function cloneVault(repoUrl: string, branch: string): Promise<void> {
   const result = await run("git", ["clone", "--branch", branch, "--single-branch", repoUrl, VAULT_DIR], {
     env: gitEnv(),
   })
@@ -46,11 +52,11 @@ export async function cloneVault(repoUrl, branch) {
 }
 
 // FR-POLL-1 (fetch path) / FR-POLL-5: failures are returned, never thrown, so the caller can log and retry
-export async function fetchVault(branch) {
+export async function fetchVault(branch: string): Promise<GitResult> {
   return runVaultGit(["fetch", "--prune", "origin", branch])
 }
 
-export async function remoteHeadSha(branch) {
+export async function remoteHeadSha(branch: string): Promise<string> {
   const result = await runVaultGit(["rev-parse", `origin/${branch}`])
   if (result.code !== 0) {
     throw new Error(`git rev-parse failed: ${result.stderr}`)
@@ -59,7 +65,7 @@ export async function remoteHeadSha(branch) {
 }
 
 // Moves the vault working tree to match the fetched remote branch tip.
-export async function syncToRemote(branch) {
+export async function syncToRemote(branch: string): Promise<void> {
   const checkout = await runVaultGit(["checkout", branch])
   if (checkout.code !== 0) {
     throw new Error(`git checkout failed: ${checkout.stderr}`)

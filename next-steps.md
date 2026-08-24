@@ -4,7 +4,7 @@
 
 | Item | Status | Notes |
 |---|---|---|
-| Daemon: git poll + conditional build + two-step rename | Implemented, untested end-to-end | `src/`; see Verify item below |
+| Daemon: git poll + conditional build + two-step rename | Implemented, untested end-to-end | TypeScript, `src/` compiled to `dist/`; see Verify item below |
 | Dockerfile: node:22-slim, git, `@jackyzha0/quartz` git dep, pre-baked plugins | Implemented, untested end-to-end | Not yet built or run — see Verify item below |
 | Default `quartz.config.yaml` with env var placeholders | Implemented | Baked into image (decided — see below) |
 | CI: `ci.yml` (lint/test/scan/build/push) to GHCR | Planned | Mirror `secondbrain-mcp`'s combined workflow — it has one `ci.yml`, not a separate `build-image.yml` |

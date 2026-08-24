@@ -16,5 +16,6 @@ Self-contained daemon that polls an Obsidian vault git repo, builds it as a stat
 - `hostPath` for both `/vault` (git clone) and `/site` (built output) ties the Pod to one node — a `nodeSelector` is required; loss of that node means service loss
 - On first-ever run `/site` is empty until the first build completes — Caddy will 404 during this window; subsequent pod restarts serve stale content immediately while the builder re-checks for changes
 - quartz's node_modules must be in the image, not installed at runtime — keeps cold-start fast and removes npm registry dependency at pod startup
+- the daemon is TypeScript (`src/`), compiled to `dist/` in the Docker builder stage (`npm run build`) — `dist/` is gitignored; there's nothing to run directly with `node src/daemon.ts`
 - SSH deploy key for private vault repos must be mounted with `defaultMode: 0400`; the default K8s Secret volume mode (`0644`) is rejected by SSH
 - `POLL_INTERVAL` governs how often `git fetch` is run, not how often builds happen — a build only fires when the remote HEAD differs from local HEAD

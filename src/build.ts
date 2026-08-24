@@ -14,7 +14,18 @@ const SITE_NEXT_DIR = "/site-next"
 const SITE_OLD_DIR = "/site-old"
 const BUILD_INFO_PATH = path.join(SITE_DIR, ".build-info")
 
-function runPiped(cmd, args, inputText, env) {
+interface PipedResult {
+  code: number | null
+  stdout: string
+  stderr: string
+}
+
+function runPiped(
+  cmd: string,
+  args: string[],
+  inputText: string,
+  env: NodeJS.ProcessEnv,
+): Promise<PipedResult> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { env, stdio: ["pipe", "pipe", "pipe"] })
     let stdout = ""
@@ -31,7 +42,7 @@ function runPiped(cmd, args, inputText, env) {
 // FR-BUILD-4: substitute ${QUARTZ_*} placeholders via envsubst, writing into the
 // installed quartz package's own directory (see agents.md — quartz resolves
 // quartz.config.yaml relative to process.cwd(), not its install path).
-export async function substituteConfig() {
+export async function substituteConfig(): Promise<void> {
   const pageTitle = process.env.QUARTZ_PAGE_TITLE || "My Vault"
   const baseUrl = process.env.QUARTZ_BASE_URL
   if (!baseUrl) {
@@ -52,7 +63,7 @@ export async function substituteConfig() {
 
 // FR-BUILD-1: run from inside the installed quartz package directory — quartz
 // resolves its own build scripts and config relative to cwd, not install path.
-export function runQuartzBuild() {
+export function runQuartzBuild(): Promise<number | null> {
   return new Promise((resolve) => {
     const child = spawn(QUARTZ_BIN, ["build", "-d", VAULT_DIR, "--output", SITE_NEXT_DIR], {
       cwd: QUARTZ_PKG_DIR,
@@ -65,7 +76,7 @@ export function runQuartzBuild() {
 
 // FR-BUILD-2 / RISK-6: rename(2) cannot replace a non-empty directory, so promotion
 // after the first build is two renames with a brief gap, not a single atomic swap.
-export function promoteSiteNext() {
+export function promoteSiteNext(): void {
   rmSync(SITE_OLD_DIR, { recursive: true, force: true })
   if (existsSync(SITE_DIR)) {
     renameSync(SITE_DIR, SITE_OLD_DIR)
@@ -75,15 +86,15 @@ export function promoteSiteNext() {
 }
 
 // FR-BUILD-3: on failure /site is never touched; only the failed staging dir is cleaned up.
-export function discardSiteNext() {
+export function discardSiteNext(): void {
   rmSync(SITE_NEXT_DIR, { recursive: true, force: true })
 }
 
-export function writeBuildInfo(sha) {
+export function writeBuildInfo(sha: string): void {
   writeFileSync(BUILD_INFO_PATH, `${sha}\n${new Date().toISOString()}\n`)
 }
 
-export function readLastBuiltSha() {
+export function readLastBuiltSha(): string | null {
   if (!existsSync(BUILD_INFO_PATH)) return null
   const [sha] = readFileSync(BUILD_INFO_PATH, "utf-8").split("\n")
   return sha || null
