@@ -154,7 +154,7 @@ Component responsibilities:
 
 ### 9.1 Numbering Convention
 
-Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Status: `Planned` (pre-implementation).
+Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Status: `Planned` (pre-implementation), or `Blocked` where an external dependency must land first.
 
 ### 9.2 Daemon — Git Polling (`POLL`)
 
@@ -175,6 +175,7 @@ Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Statu
 | FR-BUILD-3 | On build failure, `/site` SHALL remain unchanged (the previous successful build continues to be served). | Must | Planned |
 | FR-BUILD-4 | Before invoking quartz, the daemon SHALL substitute env var placeholders in `quartz.config.yaml` using `envsubst`. | Must | Planned |
 | FR-BUILD-5 | A build SHALL also be triggered on the first startup even if `/vault` already exists and HEAD has not changed, to ensure `/site` is populated after a config change. | Should | Planned |
+| FR-BUILD-6 | A build SHOULD be incremental, rebuilding only files changed since the last build, once quartz supports this for a one-shot (non-watch) invocation. Until then, every build is a full rebuild (FR-BUILD-1). See `next-steps.md` Phase 3. | Could | Blocked |
 
 ### 9.4 Configuration (`CFG`)
 

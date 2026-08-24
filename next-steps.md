@@ -37,6 +37,16 @@ Two options, not yet decided:
 
 **Trigger:** real-world metrics from Phase 2.
 
+## Blocked — Incremental builds (FR-BUILD-6)
+
+A one-shot `npx quartz build` (no `--watch`) always does a full rebuild — `ctx.incremental` only becomes `true` inside `startWatching()`, and that requires a persistent watch-mode process. That conflicts with the decision to keep quartz ephemeral per build (see BRD Appendix B — `--serve` was rejected for keeping quartz resident in memory).
+
+Two paths, neither available today:
+- Upstream ships incremental support for one-shot builds — tracked on `jackyzha0/incremental-rebuild-v2` (unmerged, not yet on `v5`)
+- Redesign the daemon around a long-running `--watch` process, reopening the RAM-resident tradeoff
+
+**Trigger:** `incremental-rebuild-v2` merges to `v5`, or Phase 3 build times force the `--watch` tradeoff back onto the table.
+
 ## Deferred — DataviewJS pre-rendering
 
 Build a custom Quartz transformer plugin that pre-renders `dataviewjs` code blocks at build time using a Node.js `vm` shim backed by the vault's frontmatter index. Scoped to frontmatter-driven queries only.
