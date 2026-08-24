@@ -58,7 +58,15 @@ async function main(): Promise<void> {
   const repoUrl = requireEnv("VAULT_REPO_URL")
   requireEnv("QUARTZ_BASE_URL")
   const branch = process.env.VAULT_BRANCH || "main"
-  const pollIntervalSeconds = Number.parseInt(process.env.POLL_INTERVAL || "300", 10)
+  const DEFAULT_POLL_INTERVAL_SECONDS = 300
+  const parsedPollInterval = Number.parseInt(process.env.POLL_INTERVAL || "", 10)
+  const pollIntervalSeconds =
+    Number.isFinite(parsedPollInterval) && parsedPollInterval > 0
+      ? parsedPollInterval
+      : DEFAULT_POLL_INTERVAL_SECONDS
+  if (process.env.POLL_INTERVAL && pollIntervalSeconds !== parsedPollInterval) {
+    logError(`Invalid POLL_INTERVAL "${process.env.POLL_INTERVAL}", falling back to ${DEFAULT_POLL_INTERVAL_SECONDS}s`)
+  }
 
   lastBuiltSha = readLastBuiltSha()
 
