@@ -5,7 +5,7 @@
 | Item | Status | Notes |
 |---|---|---|
 | Daemon: git poll + conditional build + two-step rename | Implemented, untested end-to-end | TypeScript, `src/` compiled to `dist/`; see Verify item below |
-| Dockerfile: node:22-slim, git, `@jackyzha0/quartz` git dep, pre-baked plugins | Implemented, untested end-to-end | Not yet built or run — see Verify item below |
+| Dockerfile: node:22-slim, git, `@jackyzha0/quartz` git dep, pre-baked plugins | Builds successfully in CI; daemon untested end-to-end | See Verify item below |
 | Default `quartz.config.yaml` with env var placeholders | Implemented | Baked into image (decided — see below) |
 | CI: `ci.yml` (typecheck/test/scan/build/push) to GHCR | Implemented | Mirrors `secondbrain-mcp`'s combined workflow. "lint" renamed to "typecheck" — there's no ESLint config, just `tsc --noEmit` |
 | Unit tests: `src/*.test.ts` via `node:test` (through `tsx`, not compiled) | Implemented | Covers `env.ts`/`log.ts`/`build.ts`'s `substituteConfig`. Path-coupled logic (`git.ts`, rename/build-info in `build.ts`) needs real `/vault`/`/site` — left to the Docker-based Verify item below, not unit-tested |

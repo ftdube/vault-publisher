@@ -196,6 +196,7 @@ Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Statu
 | NFR-BUILD-1 | Peak RAM during a quartz build SHALL be < 500 MB. | Must | Planned |
 | NFR-BUILD-2 | Caddy SHALL never serve a partially-written build; the two-step rename (FR-BUILD-2) is the sole mechanism guaranteeing this. A momentary 404 during the rename gap is acceptable; mixed old/new content is not. | Must | Implemented |
 | NFR-BUILD-3 | The image SHALL include `node_modules` pre-installed; no `npm install` SHALL run at pod startup. | Must | Implemented |
+| NFR-BUILD-4 | The image SHOULD be published for both `linux/amd64` and `linux/arm64` so operators without ARM hardware can run it. CI currently builds `linux/arm64` only, deliberately, on a native runner to avoid QEMU-emulated native compilation slowdowns (see `ci.yml`). | Should | Planned |
 | NFR-CFG-1 | The committed image and repo SHALL contain no personal identifiers (domains, hostnames, usernames, vault content). | Must | Planned |
 | NFR-OBS-1 | The daemon SHALL expose Prometheus-format metrics — build duration, last build timestamp, build success/failure counter — on `:9090/metrics`, unauthenticated. | Could | Planned |
 | NFR-OBS-2 | The Pod SHALL carry `prometheus.io/scrape`, `prometheus.io/port`, and `prometheus.io/path` annotations so VictoriaMetrics's existing annotation-based scrape job picks it up automatically; no dedicated ServiceMonitor or scrape config. | Could | Planned |

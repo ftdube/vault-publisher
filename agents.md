@@ -18,5 +18,6 @@ Self-contained daemon that polls an Obsidian vault git repo, builds it as a stat
 - quartz's `node_modules` is baked into the image, never installed at runtime — see `agent-archive.md`
 - the daemon is TypeScript (`src/`), compiled to `dist/` in the Docker builder stage (`npm run build`) — `dist/` is gitignored, nothing runs `src/*.ts` directly
 - tests live in `tests/`, not `src/` — see `agent-archive.md`
+- the image build logs `✗ Failed to install plugin` for `canvas-page`/`bases-page`/`note-properties` — confirmed harmless (a `tsup` DTS-generation-only failure); the plugins' JS still builds and works. See `agent-archive.md`
 - SSH deploy key must be mounted `0400`; the default K8s Secret mode (`0644`) is rejected by SSH
 - `POLL_INTERVAL` paces `git fetch`, not builds — a build only fires when the remote HEAD differs from local HEAD
