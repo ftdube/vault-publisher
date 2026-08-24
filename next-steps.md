@@ -4,23 +4,23 @@
 
 | Item | Status | Notes |
 |---|---|---|
-| Daemon: git poll + conditional build + atomic rename | Planned | Core loop |
-| Dockerfile: node:22-slim, git, quartz npm dep, pre-installed node_modules | Planned | |
-| Default `quartz.config.yaml` with env var placeholders | Planned | Open: baked-in vs ConfigMap (see below) |
-| CI: `ci.yml` (lint/test/scan/build/push) to GHCR | Planned | Mirror `secondbrain-mcp`'s combined workflow — it has one `ci.yml`, not a separate `build-image.yml` |
+| Daemon: git poll + conditional build + two-step rename | Implemented, untested end-to-end | TypeScript, `src/` compiled to `dist/`; see Verify item below |
+| Dockerfile: node:22-slim, git, `@jackyzha0/quartz` git dep, pre-baked plugins | Builds successfully in CI; daemon untested end-to-end | See Verify item below |
+| Default `quartz.config.yaml` with env var placeholders | Implemented | Baked into image (decided — see below) |
+| CI: `ci.yml` (typecheck/test/scan/build/push) to GHCR | Implemented | Mirrors `secondbrain-mcp`'s combined workflow. "lint" renamed to "typecheck" — there's no ESLint config, just `tsc --noEmit` |
+| Unit tests: `src/*.test.ts` via `node:test` (through `tsx`, not compiled) | Implemented | Covers `env.ts`/`log.ts`/`build.ts`'s `substituteConfig`. Path-coupled logic (`git.ts`, rename/build-info in `build.ts`) needs real `/vault`/`/site` — left to the Docker-based Verify item below, not unit-tested |
 | K8s deployment docs: two-container Pod, hostPath, nodeSelector | Planned | |
 | Gatus health check for the served site | Planned | Ocean pattern: every new service gets a Gatus check |
 
-## Open: quartz.config.yaml delivery
+## Verify — build and run the actual image
 
-Two options, not yet decided:
+The daemon and Dockerfile were written and the underlying quartz invocation was verified manually (real `npm install` of the git dependency, real `quartz build` against an external content dir, real plugin pre-bake, real `envsubst` run) — but Docker wasn't running in the environment that wrote this code, so the image itself has never been built or run, and the daemon's poll loop has never executed end-to-end. `/vault`, `/site`, `/site-next` are hardcoded absolute paths, so this can only be tested in a container, not on a bare host.
 
-| Option | Pro | Con |
-|---|---|---|
-| Baked into image with `envsubst` placeholders | Simple; works out of the box | Quartz config schema changes require image rebuild |
-| Mounted via K8s ConfigMap | Fully operator-controlled; no image rebuild for config changes | More complex deploy; operators must maintain their own config |
+**Trigger:** before first real deployment — `docker build`, then `docker run` against a real (even tiny) vault repo and confirm a site actually gets published to `/site`.
 
-**Trigger to decide:** when writing the Dockerfile and entrypoint. Start with baked-in; document ConfigMap override path for advanced users.
+## quartz.config.yaml delivery — decided
+
+Baked into the image with `envsubst` placeholders (not a K8s ConfigMap): simpler, works out of the box. FR-CFG-3 still allows an operator to mount a custom `quartz.config.yaml` over the baked-in default for full control.
 
 ## Phase 2 — Observability
 

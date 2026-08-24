@@ -9,7 +9,7 @@ Vault git repo (any host)
   │ git clone / git pull (periodic)
   ▼
 vault-publisher container
-  │ npx quartz build --output /site-next → atomic rename → /site
+  │ quartz build -d /vault --output /site-next → atomic rename → /site
   ▼
 hostPath /site (node-local disk)
   │ read-only mount
@@ -46,12 +46,13 @@ A `nodeSelector` is required because `hostPath` ties the Pod to one node.
 | `POLL_INTERVAL` | no | `300` | Seconds between `git fetch` checks |
 | `QUARTZ_BASE_URL` | yes | — | Base URL served by Caddy (no protocol, no trailing slash) |
 | `QUARTZ_PAGE_TITLE` | no | `My Vault` | Site title |
-| `QUARTZ_SHORT_NAME` | no | `Vault` | PWA short name |
 | `SSH_KEY_PATH` | no | `/ssh/id_ed25519` | Path to SSH deploy key (for private repos) |
 
 ## quartz configuration
 
-The included `quartz.config.yaml` is a general-purpose default. Override individual fields at deploy time via environment variables (substituted by the daemon at startup). For full control, mount a custom `quartz.config.yaml` via a ConfigMap.
+vault-publisher depends on [`@jackyzha0/quartz`](https://github.com/jackyzha0/quartz) as a git-ref-pinned dependency (it isn't published to the npm registry) — never forked or patched. The included `quartz.config.yaml` is a general-purpose default; override `pageTitle`/`baseUrl` at deploy time via environment variables (substituted by the daemon before each build). For full control, mount a custom `quartz.config.yaml` via a ConfigMap.
+
+Unpatched quartz has no PWA/manifest support, so there's no app short-name or install-to-homescreen option.
 
 ## License
 

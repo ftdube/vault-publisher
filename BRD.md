@@ -5,9 +5,9 @@
 | Field | Value |
 |---|---|
 | Document title | Business Requirements Document — vault-publisher |
-| Document version | 0.1 (Draft) |
-| System version documented | pre-implementation |
-| Date | 2026-07-28 |
+| Document version | 0.2 (Draft) |
+| System version documented | MVP implemented, untested end-to-end |
+| Date | 2026-08-24 |
 | Author | Claude Code, on behalf of the repository owner |
 | Classification | Public |
 | Related artifacts | [`agents.md`](agents.md), [`RISKS.md`](RISKS.md), [`README.md`](README.md), [`next-steps.md`](next-steps.md) |
@@ -17,6 +17,7 @@
 | Version | Date | Summary |
 |---|---|---|
 | 0.1 | 2026-07-28 | Initial draft. Pre-implementation; all requirements are Planned. |
+| 0.2 | 2026-08-24 | MUST-priority FRs implemented (`src/`, `Dockerfile`, `quartz.config.yaml`, `package.json`). Corrected several premises found wrong during implementation: quartz is `@jackyzha0/quartz` via a git-ref dependency, not an npm-registry package; its build must run with cwd inside `node_modules/@jackyzha0/quartz`, not the app root; `QUARTZ_SHORT_NAME`/PWA manifest support doesn't exist in unpatched quartz, dropped; `rename(2)` can't replace a non-empty directory, so promotion is a two-step rename (RISK-6). Not yet built or run as a container — see `next-steps.md`. |
 
 ### Approval
 
@@ -57,7 +58,7 @@ The replacement design addresses all three: quartz as a versioned npm dependency
 
 ### 4.1 In Scope
 
-- A Docker image containing: Node.js runtime, `git`, `quartz` (npm dependency), a poll-build daemon, and a default `quartz.config.yaml` with env var placeholders.
+- A Docker image containing: Node.js runtime, `git`, `@jackyzha0/quartz` (git-ref-pinned dependency), a poll-build daemon, and a default `quartz.config.yaml` with env var placeholders.
 - A daemon entrypoint that: clones the vault on first run (or pulls on subsequent runs), runs `npx quartz build` when HEAD changes, writes output atomically to `/site`.
 - Configurable poll interval, git remote, branch, and quartz site parameters via environment variables.
 - SSH deploy key support for private vault repos.
@@ -93,7 +94,7 @@ The replacement design addresses all three: quartz as a versioned npm dependency
 - **A4.** The Caddy sidecar is the only consumer of `/site`; no other process writes to that volume.
 - **C1.** The image must contain no personal identifiers — no domains, hostnames, usernames, vault content, or personal infrastructure specifics.
 - **C2.** Build output must never be partially visible during a write. Atomic rename from a staging path is mandatory.
-- **C3.** quartz must remain an unpatched npm dependency. Any required behavior change must be achieved via config, not code patches.
+- **C3.** quartz (`@jackyzha0/quartz`, installed via a git-ref-pinned dependency — it is `private: true` and not published to the npm registry) must remain unpatched. Any required behavior change must be achieved via config, not code patches.
 
 ## 7. Glossary
 
@@ -156,26 +157,26 @@ Component responsibilities:
 
 ### 9.1 Numbering Convention
 
-Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Status: `Planned` (pre-implementation), or `Blocked` where an external dependency must land first.
+Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Status: `Planned` (pre-implementation), `Implemented` (code exists — see `next-steps.md` for what has and hasn't been run end-to-end), or `Blocked` where an external dependency must land first.
 
 ### 9.2 Daemon — Git Polling (`POLL`)
 
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
-| FR-POLL-1 | On startup, the daemon SHALL clone `VAULT_REPO_URL` to `/vault` if `/vault/.git` does not exist; otherwise it SHALL run `git fetch`. | Must | Planned |
-| FR-POLL-2 | After fetch, if the remote HEAD for `VAULT_BRANCH` differs from the local HEAD, the daemon SHALL run a build (§9.3) and update local HEAD. | Must | Planned |
-| FR-POLL-3 | The daemon SHALL sleep `POLL_INTERVAL` seconds between fetch cycles. | Must | Planned |
-| FR-POLL-4 | SSH key at `SSH_KEY_PATH` SHALL be used for git operations when present; HTTPS is used otherwise. | Must | Planned |
-| FR-POLL-5 | A fetch failure SHALL be logged and retried on the next cycle; it SHALL NOT crash the daemon. | Must | Planned |
+| FR-POLL-1 | On startup, the daemon SHALL clone `VAULT_REPO_URL` to `/vault` if `/vault/.git` does not exist; otherwise it SHALL run `git fetch`. | Must | Implemented |
+| FR-POLL-2 | After fetch, if the remote HEAD for `VAULT_BRANCH` differs from the local HEAD, the daemon SHALL run a build (§9.3) and update local HEAD. | Must | Implemented |
+| FR-POLL-3 | The daemon SHALL sleep `POLL_INTERVAL` seconds between fetch cycles. | Must | Implemented |
+| FR-POLL-4 | SSH key at `SSH_KEY_PATH` SHALL be used for git operations when present; HTTPS is used otherwise. | Must | Implemented |
+| FR-POLL-5 | A fetch failure SHALL be logged and retried on the next cycle; it SHALL NOT crash the daemon. | Must | Implemented |
 
 ### 9.3 Daemon — Build (`BUILD`)
 
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
-| FR-BUILD-1 | The daemon SHALL invoke `npx quartz build -d /vault --output /site-next`. | Must | Planned |
-| FR-BUILD-2 | On build success, the daemon SHALL atomically rename `/site-next` to `/site`. | Must | Planned |
-| FR-BUILD-3 | On build failure, `/site` SHALL remain unchanged (the previous successful build continues to be served). | Must | Planned |
-| FR-BUILD-4 | Before invoking quartz, the daemon SHALL substitute env var placeholders in `quartz.config.yaml` using `envsubst`. | Must | Planned |
+| FR-BUILD-1 | From within `node_modules/@jackyzha0/quartz` (quartz resolves its own build scripts and config relative to `process.cwd()`, not its install path), the daemon SHALL invoke `quartz build -d /vault --output /site-next`. | Must | Implemented |
+| FR-BUILD-2 | On build success, the daemon SHALL promote `/site-next` to `/site`. `rename(2)` cannot replace a non-empty directory (`ENOTEMPTY`, confirmed by test), so promotion after the first build is two renames — `/site` → `/site-old`, then `/site-next` → `/site` — with `/site-old` removed after. See RISK-6. | Must | Implemented |
+| FR-BUILD-3 | On build failure, `/site` SHALL remain unchanged (the previous successful build continues to be served). | Must | Implemented |
+| FR-BUILD-4 | Before invoking quartz, the daemon SHALL substitute env var placeholders in `quartz.config.yaml` using `envsubst`. | Must | Implemented |
 | FR-BUILD-5 | A build SHALL also be triggered on the first startup even if `/vault` already exists and HEAD has not changed, to ensure `/site` is populated after a config change. | Should | Planned |
 | FR-BUILD-6 | A build SHOULD be incremental, rebuilding only files changed since the last build, once quartz supports this for a one-shot (non-watch) invocation. Until then, every build is a full rebuild (FR-BUILD-1). See `next-steps.md` Phase 3. | Could | Blocked |
 
@@ -183,8 +184,8 @@ Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Statu
 
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
-| FR-CFG-1 | All site-specific parameters (`QUARTZ_BASE_URL`, `QUARTZ_PAGE_TITLE`, `QUARTZ_SHORT_NAME`) SHALL be injected via environment variables, not baked into the image. | Must | Planned |
-| FR-CFG-2 | A default `quartz.config.yaml` SHALL be included in the image, with `${QUARTZ_*}` placeholders, covering a working general-purpose Quartz configuration. | Must | Planned |
+| FR-CFG-1 | All site-specific parameters (`QUARTZ_BASE_URL`, `QUARTZ_PAGE_TITLE`) SHALL be injected via environment variables, not baked into the image. | Must | Implemented |
+| FR-CFG-2 | A default `quartz.config.yaml` SHALL be included in the image, with `${QUARTZ_*}` placeholders, covering a working general-purpose Quartz configuration. | Must | Implemented |
 | FR-CFG-3 | Operators MAY override the default config by mounting a custom `quartz.config.yaml` at the app root. | Should | Planned |
 
 **Non-Functional**
@@ -193,8 +194,9 @@ Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Statu
 |---|---|---|---|
 | NFR-POLL-1 | Idle resident RAM (between builds) SHALL be < 100 MB. | Must | Planned |
 | NFR-BUILD-1 | Peak RAM during a quartz build SHALL be < 500 MB. | Must | Planned |
-| NFR-BUILD-2 | Caddy SHALL never serve a partially-written build; the atomic rename (FR-BUILD-2) is the sole mechanism guaranteeing this. | Must | Planned |
-| NFR-BUILD-3 | The image SHALL include `node_modules` pre-installed; no `npm install` SHALL run at pod startup. | Must | Planned |
+| NFR-BUILD-2 | Caddy SHALL never serve a partially-written build; the two-step rename (FR-BUILD-2) is the sole mechanism guaranteeing this. A momentary 404 during the rename gap is acceptable; mixed old/new content is not. | Must | Implemented |
+| NFR-BUILD-3 | The image SHALL include `node_modules` pre-installed; no `npm install` SHALL run at pod startup. | Must | Implemented |
+| NFR-BUILD-4 | The image SHOULD be published for both `linux/amd64` and `linux/arm64` so operators without ARM hardware can run it. CI currently builds `linux/arm64` only, deliberately, on a native runner to avoid QEMU-emulated native compilation slowdowns (see `ci.yml`). | Should | Planned |
 | NFR-CFG-1 | The committed image and repo SHALL contain no personal identifiers (domains, hostnames, usernames, vault content). | Must | Planned |
 | NFR-OBS-1 | The daemon SHALL expose Prometheus-format metrics — build duration, last build timestamp, build success/failure counter — on `:9090/metrics`, unauthenticated. | Could | Planned |
 | NFR-OBS-2 | The Pod SHALL carry `prometheus.io/scrape`, `prometheus.io/port`, and `prometheus.io/path` annotations so VictoriaMetrics's existing annotation-based scrape job picks it up automatically; no dedicated ServiceMonitor or scrape config. | Could | Planned |
@@ -206,7 +208,7 @@ Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Statu
 | Vault git clone | `/vault` (hostPath) | Persists across pod restarts; updated by `git pull` |
 | Built static site | `/site` (hostPath) | Persists across pod restarts; always a complete, consistent snapshot |
 | Build staging | `/site-next` | Ephemeral; created per build, renamed to `/site` on success, deleted on failure |
-| quartz config | `/usr/src/app/quartz.config.yaml` | Default baked into image; overridable via ConfigMap mount |
+| quartz config | `node_modules/@jackyzha0/quartz/quartz.config.yaml` | Must live inside the installed quartz package — quartz resolves config relative to `process.cwd()`, not its install path (see `agents.md`). Default baked into image; overridable via ConfigMap mount |
 | SSH deploy key | `SSH_KEY_PATH` (K8s Secret mount) | Must be `0400`; read at daemon startup only |
 
 ## 11. Interface Requirements
@@ -223,7 +225,7 @@ Requirements use `FR-<AREA>-<n>` / `NFR-<AREA>-<n>`. Priority uses MoSCoW. Statu
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
 | NFR-SEC-1 | SSH deploy keys SHALL be read-only (`0400`) and mounted from a K8s Secret, never committed to the repo. | Must | Planned |
-| NFR-SEC-2 | The daemon SHALL NOT push to the vault repo; it clones/pulls only. | Must | Planned |
+| NFR-SEC-2 | The daemon SHALL NOT push to the vault repo; it clones/pulls only. | Must | Implemented |
 | NFR-SEC-3 | No personal identifiers SHALL be committed to this repository (see C1). | Must | Planned |
 | NFR-SEC-4 | The built static site is unauthenticated by design; access control is the ingress layer's responsibility. | Must | Planned |
 
