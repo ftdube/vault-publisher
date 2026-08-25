@@ -30,9 +30,27 @@ spec:
       # hostPath binds this Pod to one node's local disk — REPLACE with the target node.
       nodeSelector:
         kubernetes.io/hostname: REPLACE_WITH_NODE_NAME
+      # chowns both hostPath volumes to the non-root UID below — see agents.md
+      # gotchas for why (fsGroup doesn't apply to hostPath).
+      initContainers:
+        - name: init-permissions
+          image: busybox:1.36
+          securityContext:
+            runAsUser: 0
+          command: ["chown", "-R", "1000:1000", "/vault", "/site"]
+          volumeMounts:
+            - name: vault
+              mountPath: /vault
+            - name: site
+              mountPath: /site
       containers:
         - name: git-sync
           image: registry.k8s.io/git-sync/git-sync:v4.2.4
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
           # RISK-9: if git-sync's rev-retention window is shorter than the slowest
           # build, a build can fail mid-read when its pinned rev gets GC'd. Retention
           # flag/behavior not verified against this pinned tag — check before relying on it.
@@ -60,6 +78,9 @@ spec:
               value: "true"
             - name: GITSYNC_SSH_KEY_FILE
               value: /ssh/id_ed25519
+            # required for SSH under a non-default UID — see agents.md gotchas
+            - name: GITSYNC_ADD_USER
+              value: "true"
           volumeMounts:
             - name: vault
               mountPath: /vault
@@ -68,6 +89,11 @@ spec:
               readOnly: true
         - name: builder
           image: ghcr.io/OWNER/vault-publisher:latest # replace OWNER
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
           envFrom:
             - configMapRef:
                 name: vault-publisher-config

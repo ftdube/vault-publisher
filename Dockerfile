@@ -39,7 +39,11 @@ FROM node:22-slim
 RUN apt-get update && apt-get install -y --no-install-recommends gettext-base \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/src/app
-COPY --from=builder /usr/src/app/node_modules ./node_modules
-COPY package.json quartz.config.yaml ./
-COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=builder --chown=node:node /usr/src/app/node_modules ./node_modules
+COPY --chown=node:node package.json quartz.config.yaml ./
+COPY --from=builder --chown=node:node /usr/src/app/dist ./dist
+# node:22-slim ships a non-root `node` user (uid/gid 1000) — issue #8: the daemon
+# has SSH-adjacent hostPath access and runs third-party quartz plugins at build
+# time, so it must not run as root.
+USER node
 ENTRYPOINT ["node", "dist/daemon.js"]
