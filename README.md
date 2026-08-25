@@ -37,6 +37,8 @@ A three-container Kubernetes Pod, tied to one node via `nodeSelector` (both volu
 | `builder` | `ghcr.io/<owner>/vault-publisher` | detect `/vault/current` change + quartz build |
 | `caddy` | `caddy:alpine` | static file server |
 
+`git-sync` and `builder` run as uid 1000, not root (issue #8); an `init-permissions` initContainer chowns both hostPath volumes to `1000:1000` once at Pod start, since `fsGroup` doesn't apply to hostPath volumes.
+
 | Path | Purpose |
 |---|---|
 | `/vault` | git checkout of the vault repo, maintained by git-sync (rw for git-sync, ro for `builder`; persists across restarts) |
