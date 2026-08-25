@@ -8,11 +8,8 @@ const QUARTZ_BIN = path.join(APP_ROOT, "node_modules/.bin/quartz")
 const CONFIG_TEMPLATE = path.join(APP_ROOT, "quartz.config.yaml")
 const CONFIG_DEST = path.join(QUARTZ_PKG_DIR, "quartz.config.yaml")
 
-// /site itself is the hostPath mount point (RISK-6, issue #4): rename(2) refuses to
-// rename a directory that is an active mount root, with EBUSY, even when empty —
-// confirmed against a real bind mount, not just cross-device EXDEV. So current/next/old
-// live as sibling subdirectories inside /site instead, none of which is a mount point,
-// keeping the two-step rename on one filesystem. Caddy must serve /site/current, not /site.
+// /site is a mount point; rename(2) can't rename it (EBUSY). current/next/old live as
+// subdirectories instead — never rename /site itself. See agent-archive.md.
 const SITE_MOUNT = "/site"
 const SITE_DIR = path.join(SITE_MOUNT, "current")
 const SITE_NEXT_DIR = path.join(SITE_MOUNT, "next")
