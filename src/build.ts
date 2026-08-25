@@ -8,7 +8,6 @@ const QUARTZ_BIN = path.join(APP_ROOT, "node_modules/.bin/quartz")
 const CONFIG_TEMPLATE = path.join(APP_ROOT, "quartz.config.yaml")
 const CONFIG_DEST = path.join(QUARTZ_PKG_DIR, "quartz.config.yaml")
 
-const VAULT_DIR = "/vault"
 const SITE_DIR = "/site"
 const SITE_NEXT_DIR = "/site-next"
 const SITE_OLD_DIR = "/site-old"
@@ -63,9 +62,11 @@ export async function substituteConfig(): Promise<void> {
 
 // FR-BUILD-1: run from inside the installed quartz package directory — quartz
 // resolves its own build scripts and config relative to cwd, not install path.
-export function runQuartzBuild(): Promise<number | null> {
+// vaultDir must be a resolved, concrete path (see vault.ts's readVaultCurrentRef), not
+// a live symlink — pins the build to one snapshot even if git-sync resyncs mid-build.
+export function runQuartzBuild(vaultDir: string): Promise<number | null> {
   return new Promise((resolve) => {
-    const child = spawn(QUARTZ_BIN, ["build", "-d", VAULT_DIR, "--output", SITE_NEXT_DIR], {
+    const child = spawn(QUARTZ_BIN, ["build", "-d", vaultDir, "--output", SITE_NEXT_DIR], {
       cwd: QUARTZ_PKG_DIR,
       stdio: ["ignore", "inherit", "inherit"],
     })
@@ -90,12 +91,12 @@ export function discardSiteNext(): void {
   rmSync(SITE_NEXT_DIR, { recursive: true, force: true })
 }
 
-export function writeBuildInfo(sha: string): void {
-  writeFileSync(BUILD_INFO_PATH, `${sha}\n${new Date().toISOString()}\n`)
+export function writeBuildInfo(ref: string): void {
+  writeFileSync(BUILD_INFO_PATH, `${ref}\n${new Date().toISOString()}\n`)
 }
 
-export function readLastBuiltSha(): string | null {
+export function readLastBuiltRef(): string | null {
   if (!existsSync(BUILD_INFO_PATH)) return null
-  const [sha] = readFileSync(BUILD_INFO_PATH, "utf-8").split("\n")
-  return sha || null
+  const [ref] = readFileSync(BUILD_INFO_PATH, "utf-8").split("\n")
+  return ref || null
 }

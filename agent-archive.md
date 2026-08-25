@@ -12,6 +12,10 @@ The old fork (`ftdube/quartz`, now retired in favor of this repo) patched `quart
 
 Two independent reasons: (1) `npm ci` at image-build time means zero network/install work at pod startup, keeping cold-start fast (NFR-BUILD-3); (2) `@jackyzha0/quartz` is `private: true` and was never published to the npm registry — it's a git-ref-pinned dependency, so a fresh `npm install` at runtime would also need git and network access the pod may not reliably have on first boot.
 
+## Why the deleted `src/git.ts` fetched with an explicit refspec
+
+Vault sync moved to a `git-sync` sidecar (BRD v0.3/v0.4, RISK-9/RISK-10); `src/git.ts` was deleted rather than kept unused. Its `fetchVault` used `git fetch --prune origin +refs/heads/<branch>:refs/remotes/origin/<branch>` instead of a bare `git fetch origin <branch>`, specifically because the bare form only updates `FETCH_HEAD`, not `origin/<branch>` — and the old code then did `git rev-parse origin/<branch>`, which would silently resolve to a stale ref without the explicit refspec. This was never confirmed as a non-issue for git-sync's own ref-resolution logic; worth checking during the Verify step (`next-steps.md`) that `/vault/current` actually tracks `VAULT_BRANCH`, not some other ref.
+
 ## Test organization
 
 Tests live in `tests/`, not colocated with source under `src/`, so the Docker build's `COPY src/ ./src/` never sweeps up `*.test.ts` files into an image layer. Run via `tsx --test tests/*.test.ts` — not compiled by `tsc` (tests aren't part of `dist/`). Test names are prefixed with the FR/NFR or BRD section they verify (e.g. `FR-BUILD-4: ...`) so traceability back to the BRD is visible in `npm test` output, not just in source comments.

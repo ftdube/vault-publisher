@@ -20,7 +20,7 @@ COPY src/ ./src/
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-slim
-RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client gettext-base \
+RUN apt-get update && apt-get install -y --no-install-recommends gettext-base \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/src/app
 COPY --from=builder /usr/src/app/node_modules ./node_modules
