@@ -14,8 +14,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// FR-BUILD-2/FR-BUILD-3, G3: the last successfully built ref persists in /site/.build-info,
-// so a pod restart doesn't force a rebuild when the vault hasn't actually changed.
+// FR-BUILD-2/FR-BUILD-3, G3: the last successfully built ref persists in
+// /site/current/.build-info, so a pod restart doesn't force a rebuild when the vault hasn't
+// actually changed.
 let lastBuiltRef: string | null = null
 
 // FR-BUILD-7: vault sync itself is owned by the git-sync sidecar; this only detects

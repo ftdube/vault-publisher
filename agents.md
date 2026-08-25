@@ -7,7 +7,7 @@ Daemon that builds an Obsidian vault as a static site with Quartz whenever a `gi
 - Never bake vault content, personal domains, hostnames, or credentials into the image
 - `VAULT_REPO_URL`/`VAULT_BRANCH`/`SSH_KEY_PATH` are injected into the `git-sync` sidecar; `QUARTZ_BASE_URL`/`QUARTZ_PAGE_TITLE`/`POLL_INTERVAL` into the daemon — both via env vars / K8s Secrets
 - `@jackyzha0/quartz` is a git-ref-pinned dependency (`private: true`, not on the npm registry) — do not fork or patch it; upgrades are a `package.json` ref bump
-- Build output is written to a temp directory first, then renamed to `/site` — never write directly to the live serve path mid-build
+- Build output is written to `/site/next`, then renamed to `/site/current` — never write directly to `/site/current` mid-build; never rename the `/site` mount point itself (see gotcha below)
 
 ## Non-obvious gotchas
 
@@ -15,7 +15,8 @@ Daemon that builds an Obsidian vault as a static site with Quartz whenever a `gi
 - quartz's build must run with cwd set to `node_modules/@jackyzha0/quartz` itself (config + build scripts resolve relative to `process.cwd()`) — running from the app root fails. See `agent-archive.md`
 - quartz has no native PWA/manifest support — dropped rather than patching quartz (see `agent-archive.md`)
 - `hostPath` for `/vault` and `/site` ties the Pod to one node — `nodeSelector` required; loss of that node means service loss
-- `/site` is empty until the first build completes — Caddy 404s during that one-time window only
+- `/site` itself is the hostPath mount point — `rename(2)` on it fails with `EBUSY` even when empty (confirmed live, issue #4); `current`/`next`/`old` live as subdirectories inside it instead. Caddy's root MUST be `/site/current`, not `/site`
+- `/site/current` doesn't exist until the first build completes — Caddy 404s during that one-time window only
 - quartz's `node_modules` is baked into the image, never installed at runtime — see `agent-archive.md`
 - the daemon is TypeScript (`src/`), compiled to `dist/` in the Docker builder stage (`npm run build`) — `dist/` is gitignored, nothing runs `src/*.ts` directly
 - tests live in `tests/`, not `src/` — see `agent-archive.md`

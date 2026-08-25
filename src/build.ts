@@ -8,9 +8,12 @@ const QUARTZ_BIN = path.join(APP_ROOT, "node_modules/.bin/quartz")
 const CONFIG_TEMPLATE = path.join(APP_ROOT, "quartz.config.yaml")
 const CONFIG_DEST = path.join(QUARTZ_PKG_DIR, "quartz.config.yaml")
 
-const SITE_DIR = "/site"
-const SITE_NEXT_DIR = "/site-next"
-const SITE_OLD_DIR = "/site-old"
+// /site is a mount point; rename(2) can't rename it (EBUSY). current/next/old live as
+// subdirectories instead — never rename /site itself. See agent-archive.md.
+const SITE_MOUNT = "/site"
+const SITE_DIR = path.join(SITE_MOUNT, "current")
+const SITE_NEXT_DIR = path.join(SITE_MOUNT, "next")
+const SITE_OLD_DIR = path.join(SITE_MOUNT, "old")
 const BUILD_INFO_PATH = path.join(SITE_DIR, ".build-info")
 
 interface PipedResult {
@@ -77,6 +80,8 @@ export function runQuartzBuild(vaultDir: string): Promise<number | null> {
 
 // FR-BUILD-2 / RISK-6: rename(2) cannot replace a non-empty directory, so promotion
 // after the first build is two renames with a brief gap, not a single atomic swap.
+// Both renames stay within /site (see SITE_DIR comment above) so neither crosses a
+// filesystem boundary or targets a mount point itself.
 export function promoteSiteNext(): void {
   rmSync(SITE_OLD_DIR, { recursive: true, force: true })
   if (existsSync(SITE_DIR)) {

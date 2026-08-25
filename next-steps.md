@@ -8,17 +8,19 @@
 | Dockerfile: node:22-slim, `@jackyzha0/quartz` git dep, pre-baked plugins | Builds successfully in CI (image build); daemon untested end-to-end | See Verify item below. `git`/`openssh-client` dropped from the final stage (git-sync sidecar owns git now) |
 | Default `quartz.config.yaml` with env var placeholders | Implemented | Baked into image (decided — see below) |
 | CI: `ci.yml` (typecheck/test/scan/build/push) to GHCR | Implemented | "lint" renamed to "typecheck" — there's no ESLint config, just `tsc --noEmit` |
-| Unit tests: `src/*.test.ts` via `node:test` (through `tsx`, not compiled) | Implemented | Covers `env.ts`/`log.ts`/`build.ts`'s `substituteConfig`/`vault.ts`'s `readVaultCurrentRef` (real symlinks in a tmpdir). Rename/build-info promotion in `build.ts` still needs real `/site` — left to the Docker-based Verify item below, not unit-tested |
+| Unit tests: `src/*.test.ts` via `node:test` (through `tsx`, not compiled) | Implemented | Covers `env.ts`/`log.ts`/`build.ts`'s `substituteConfig`/`vault.ts`'s `readVaultCurrentRef` (real symlinks in a tmpdir). Rename/build-info promotion in `build.ts` needs a real mounted `/site` (a mount point behaves differently than a tmpdir — see Verify item below) — covered by the Docker-based Verify pass, not by a unit test |
 | K8s deployment docs: three-container Pod (git-sync, builder, Caddy), hostPath, nodeSelector | Planned | Container count depends on Phase 1.5 (git-sync sidecar) landing first |
 | Health check for the served site | Planned | Every new service gets a Gatus (or equivalent) check once deployed |
 
-## Verify — build and run the actual image
+## Verify — build and run the actual image — Done (2026-08-25)
 
-The daemon and Dockerfile were written and the underlying quartz invocation was verified manually (real `npm install` of the git dependency, real `quartz build` against an external content dir, real plugin pre-bake, real `envsubst` run) — but Docker wasn't running in the environment that wrote this code, so the image itself has never been built or run, and the daemon's poll loop has never executed end-to-end. `/vault/current`, `/site`, `/site-next` are hardcoded absolute paths, so this can only be tested in a container (with a real git-sync sidecar populating `/vault/current`), not on a bare host.
+Executed against the real image and the real `registry.k8s.io/git-sync/git-sync:v4.2.4` sidecar, using a throwaway sample vault (bare local repo, no personal content). Found a launch-blocking bug: `/site` is the hostPath mount point itself, and `rename(2)` cannot rename a mount point (`EBUSY`), so every promotion was failing and the site never published — see issue #4, RISK-6, BRD v0.5. Fixed in `src/build.ts` (`current`/`next`/`old` as subdirectories of `/site`, not the mount point) and re-verified: build succeeds, a second vault commit triggers a rebuild within `POLL_INTERVAL`, and output is correctly published to `/site/current`.
 
-**Trigger:** before first real deployment — `docker build`, then `docker run` alongside a `git-sync` sidecar against a real (even tiny) vault repo and confirm a site actually gets published to `/site`. While at it, also confirm:
-- `/vault/current` tracks `VAULT_BRANCH` specifically, not some other ref (`agent-archive.md`'s refspec-gotcha note, RISK-10)
-- git-sync's rev directories are named deterministically by content (RISK-10), not something that would cause spurious rebuilds
+Also confirmed while at it:
+- `/vault/current` tracks the configured branch specifically, not some other ref
+- git-sync's worktree dirs are named deterministically by commit SHA (RISK-10, closed) — no spurious-rebuild risk
+
+Not covered by this pass: SSH-key auth (tested via local `file://`, not SSH), and content-specific quartz behavior beyond a few notes (Dataview queries, deep folder structures, the community plugins' actual runtime behavior against real frontmatter).
 
 ## quartz.config.yaml delivery — decided
 

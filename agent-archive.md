@@ -1,5 +1,11 @@
 Companion to `agents.md` — removed-but-accurate content, trimmed from the main file to stay within its token budget. Never loaded automatically; read only when asked.
 
+## Why `/site` itself is never renamed (RISK-6, issue #4)
+
+`/site` is the hostPath mount point, and POSIX `rename(2)` refuses to rename a directory that is an active mount root — `EBUSY`, even when the directory is empty. This is distinct from the cross-device `EXDEV` case originally guessed in issue #4; confirmed directly against a real bind mount inside a running container: a plain directory rename succeeded, but `renameSync('/site', ...)` failed with `EBUSY: resource busy or locked`. Before this was found, every build succeeded but every promotion failed, so the site never actually published in any real deployment — the daemon looped forever retrying.
+
+Fixed by keeping `current`/`next`/`old` as sibling subdirectories under `/site` instead of top-level mount paths, so the two-step rename (RISK-6) never touches the mount point itself, only its contents. Caddy's document root moved from `/site` to `/site/current` as a result — see `README.md`/`BRD.md` FR-BUILD-2.
+
 ## Why quartz's build must run from inside `node_modules/@jackyzha0/quartz`
 
 quartz resolves `quartz.config.yaml` and its own build scripts (e.g. `./quartz/build.ts`) relative to `process.cwd()`, not relative to where the package is installed. Confirmed by direct test: invoking the build from the app root (`/usr/src/app`) fails with `Could not resolve "./quartz/build.ts"`; invoking it with cwd set to `node_modules/@jackyzha0/quartz` itself succeeds. `quartz.config.yaml` must be copied into that same directory before each build for the same reason.
