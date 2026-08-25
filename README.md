@@ -2,7 +2,7 @@
 
 A self-contained Docker daemon that builds an Obsidian vault as a static site using [Quartz](https://quartz.jzhao.xyz/) whenever a [`git-sync`](https://github.com/kubernetes/git-sync) sidecar pulls a change, and serves it via a Caddy sidecar — no CronJob orchestration, no manual rebuild triggers.
 
-> **Note:** this image has never been built or run end-to-end against a real `git-sync` sidecar — see `next-steps.md`'s Verify item.
+> **Note:** verified end-to-end against a real `git-sync` sidecar and a throwaway sample vault — see `next-steps.md`'s Verify item. K8s manifests for the three-container Pod are still not written.
 
 ## How it works
 
@@ -13,10 +13,10 @@ Vault git repo (any host)
 git-sync sidecar → /vault/current (symlink, always latest)
   ▼
 vault-publisher container (reads /vault read-only)
-  │ quartz build -d /vault/current --output /site-next → atomic rename → /site
+  │ quartz build -d /vault/current --output /site/next → atomic rename → /site/current
   ▼
 hostPath /site (node-local disk)
-  │ read-only mount
+  │ read-only mount, Caddy serves /site/current
   ▼
 Caddy sidecar → Traefik / ingress
 ```
@@ -38,7 +38,7 @@ Two `hostPath` volumes are shared:
 | Path | Purpose |
 |---|---|
 | `/vault` | git checkout of the vault repo, maintained by git-sync (rw for git-sync, ro for `builder`; persists across restarts) |
-| `/site` | built static site (persists across restarts; Caddy serves this) |
+| `/site` | hostPath mount; `current`/`next`/`old` live as subdirectories inside it (the mount point itself can't be renamed — see `agents.md`). Caddy serves `/site/current`, which persists across restarts |
 
 A `nodeSelector` is required because `hostPath` ties the Pod to one node.
 

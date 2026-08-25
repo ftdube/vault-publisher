@@ -5,9 +5,9 @@
 | Field | Value |
 |---|---|
 | Document title | Business Requirements Document — vault-publisher |
-| Document version | 0.4 (Draft) |
-| System version documented | Daemon side of the git-sync sidecar architecture implemented, untested end-to-end (`next-steps.md` Verify item). §9.2's FR-SYNC-* (the git-sync sidecar itself, and K8s manifests) remain Planned — this repo has no K8s manifests yet. |
-| Date | 2026-08-24 |
+| Document version | 0.5 (Draft) |
+| System version documented | Daemon side of the git-sync sidecar architecture implemented and verified end-to-end (`next-steps.md` Verify item, issue #4). §9.2's FR-SYNC-* (the git-sync sidecar itself, and K8s manifests) remain Planned — this repo has no K8s manifests yet. |
+| Date | 2026-08-25 |
 | Author | Claude Code, on behalf of the repository owner |
 | Classification | Public |
 | Related artifacts | [`agents.md`](agents.md), [`RISKS.md`](RISKS.md), [`README.md`](README.md), [`next-steps.md`](next-steps.md) |
@@ -20,6 +20,7 @@
 | 0.2 | 2026-08-24 | MUST-priority FRs implemented (`src/`, `Dockerfile`, `quartz.config.yaml`, `package.json`). Corrected several premises found wrong during implementation: quartz is `@jackyzha0/quartz` via a git-ref dependency, not an npm-registry package; its build must run with cwd inside `node_modules/@jackyzha0/quartz`, not the app root; `QUARTZ_SHORT_NAME`/PWA manifest support doesn't exist in unpatched quartz, dropped; `rename(2)` can't replace a non-empty directory, so promotion is a two-step rename (RISK-6). Not yet built or run as a container — see `next-steps.md`. |
 | 0.3 | 2026-08-24 | Proposed architecture change (docs only, no code yet): vault git cloning/pulling is delegated from the daemon to a dedicated `git-sync` sidecar (§8, §9.2). The daemon narrows to detecting a local checkout change and running the build; it no longer touches git, `VAULT_REPO_URL`, or the SSH deploy key at all. FR-POLL-* superseded by FR-SYNC-* (§9.2); FR-BUILD-1's `-d` path changes from `/vault` to `/vault/current`; `/vault` becomes daemon-read-only. `POLL_INTERVAL` now paces the daemon's local checkout check, not a network fetch — `VAULT_SYNC_PERIOD` is a new, separate var pacing git-sync's own fetch cadence. Default change-detection is self-poll (daemon reads git-sync's `current` symlink); a configurable webhook-push alternative is deferred (`next-steps.md`). See Appendix B for why this doesn't repeat the three-moving-parts problem §2 describes. |
 | 0.4 | 2026-08-24 | Daemon side of v0.3 implemented — see `next-steps.md`'s "Phase 1.5 — git-sync sidecar" section for what changed. Typecheck and unit tests pass; Docker build/run still unverified end-to-end. FR-SYNC-1..5 (the git-sync sidecar container itself, and K8s manifests) remain Planned — out of this repo's code. |
+| 0.5 | 2026-08-25 | Verify step executed: real image build, real `git-sync:v4.2.4` sidecar, real (throwaway) sample vault. Found and fixed a launch-blocking bug (issue #4, RISK-6): `/site` is the hostPath mount point itself, and `rename(2)` refuses to rename a mount point (`EBUSY`) even when empty — every promotion was failing, so the site never published at all. Fixed by moving `current`/`next`/`old` to be sibling subdirectories under `/site` instead of top-level mount paths (FR-BUILD-1/2 updated accordingly); Caddy's document root is now `/site/current`, not `/site`. Re-verified after the fix: build succeeds, a second vault commit triggers a rebuild, output is correctly published. Also confirmed RISK-10 (git-sync worktree dirs are named deterministically by commit SHA) and that `/vault/current` tracks the configured branch. |
 
 ### Approval
 
@@ -109,10 +110,11 @@ The replacement design addresses all three: quartz as a versioned npm dependency
 | Sync period (`VAULT_SYNC_PERIOD`) | Seconds between git-sync's own fetch/pull cycles — independent of `POLL_INTERVAL` |
 | `/vault` | hostPath directory git-sync writes the vault checkout into (rw for git-sync, ro for the daemon) |
 | `/vault/current` | Symlink git-sync maintains, always pointing at the latest successfully synced worktree |
-| `/site` | hostPath directory where the built static site is written; served by Caddy |
-| `/site-next` | Staging directory; build output written here, then renamed to `/site` atomically |
+| `/site` | hostPath mount point; contains `current`/`next`/`old` subdirectories (the mount point itself can't be renamed — RISK-6/issue #4) |
+| `/site/current` | The built static site actually served by Caddy |
+| `/site/next` | Staging directory; build output written here, then renamed to `/site/current` atomically |
 | Quartz | The upstream static site generator; used as an unpatched npm dependency |
-| Caddy | Lightweight HTTP server deployed as a sidecar, reading from `/site` |
+| Caddy | Lightweight HTTP server deployed as a sidecar, reading from `/site/current` |
 | hostPath | Kubernetes volume type backed by a directory on the node's local disk |
 
 ## 8. System Context & Architecture
@@ -141,14 +143,14 @@ Vault git repo (any host — SSH or HTTPS)
 │  │    readlink /vault/current                  │
 │  │    if changed since last build:              │
 │  │      quartz build -d /vault/current          │
-│  │      → /site-next                           │
-│  │      rename → /site                         │
+│  │      → /site/next                           │
+│  │      rename → /site/current                 │
 │  │    sleep POLL_INTERVAL                       │
 │  └──────────┬──────────┘                       │
 │             │ hostPath: /site (rw)              │
 │  ┌──────────┴──────────┐                       │
 │  │  Caddy sidecar      │                       │
-│  │  serves /site (ro)  │                       │
+│  │  serves /site/current (ro)                  │
 │  └──────────┬──────────┘                       │
 └─────────────┼───────────────────────────────────┘
               │ HTTP
@@ -163,8 +165,8 @@ Component responsibilities:
 | Component | Responsibility | Writes to vault remote? | Writes to `/vault`? |
 |---|---|---|---|
 | git-sync sidecar | Clone/pull `VAULT_REPO_URL` into `/vault`, maintain the `current` symlink | No (clone/pull only, §12) | Yes (sole writer) |
-| vault-publisher daemon | Detect `/vault/current` change, quartz build, atomic `/site` swap, expose `/metrics` | No | No (read-only mount) |
-| Caddy sidecar | Serve `/site` over HTTP | No | No |
+| vault-publisher daemon | Detect `/vault/current` change, quartz build, atomic `/site/current` swap, expose `/metrics` | No | No (read-only mount) |
+| Caddy sidecar | Serve `/site/current` over HTTP | No | No |
 | Traefik / ingress | TLS termination, routing | No | No |
 
 ## 9. Functional & Non-Functional Requirements
@@ -189,11 +191,11 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
-| FR-BUILD-1 | From within `node_modules/@jackyzha0/quartz` (quartz resolves its own build scripts and config relative to `process.cwd()`, not its install path), the daemon SHALL invoke `quartz build -d <resolved-dir> --output /site-next`, where `<resolved-dir>` is `/vault/current` resolved to a concrete path once per poll cycle (FR-BUILD-7), not the live symlink — this pins the build to one snapshot even if git-sync retargets the symlink mid-build (RISK-9). (v0.2: `-d /vault`, before vault sync moved to a git-sync sidecar — see §9.2.) | Must | Implemented |
-| FR-BUILD-2 | On build success, the daemon SHALL promote `/site-next` to `/site`. `rename(2)` cannot replace a non-empty directory (`ENOTEMPTY`, confirmed by test), so promotion after the first build is two renames — `/site` → `/site-old`, then `/site-next` → `/site` — with `/site-old` removed after. See RISK-6. | Must | Implemented |
-| FR-BUILD-3 | On build failure, `/site` SHALL remain unchanged (the previous successful build continues to be served). | Must | Implemented |
+| FR-BUILD-1 | From within `node_modules/@jackyzha0/quartz` (quartz resolves its own build scripts and config relative to `process.cwd()`, not its install path), the daemon SHALL invoke `quartz build -d <resolved-dir> --output /site/next`, where `<resolved-dir>` is `/vault/current` resolved to a concrete path once per poll cycle (FR-BUILD-7), not the live symlink — this pins the build to one snapshot even if git-sync retargets the symlink mid-build (RISK-9). (v0.2: `-d /vault`, before vault sync moved to a git-sync sidecar — see §9.2.) | Must | Implemented |
+| FR-BUILD-2 | On build success, the daemon SHALL promote `/site/next` to `/site/current`. `rename(2)` cannot replace a non-empty directory (`ENOTEMPTY`) and cannot rename a mount point itself (`EBUSY`, confirmed live against a real hostPath-style bind mount — issue #4), so `current`/`next`/`old` are sibling subdirectories under the `/site` mount, never `/site` itself; promotion after the first build is two renames — `current` → `old`, then `next` → `current` — with `old` removed after. See RISK-6. | Must | Implemented |
+| FR-BUILD-3 | On build failure, `/site/current` SHALL remain unchanged (the previous successful build continues to be served). | Must | Implemented |
 | FR-BUILD-4 | Before invoking quartz, the daemon SHALL substitute env var placeholders in `quartz.config.yaml` using `envsubst`. | Must | Implemented |
-| FR-BUILD-5 | A build SHALL also be triggered on the first startup even if `/vault` already exists and HEAD has not changed, to ensure `/site` is populated after a config change. | Should | Planned |
+| FR-BUILD-5 | A build SHALL also be triggered on the first startup even if `/vault` already exists and HEAD has not changed, to ensure `/site/current` is populated after a config change. | Should | Planned |
 | FR-BUILD-6 | A build SHOULD be incremental, rebuilding only files changed since the last build, once quartz supports this for a one-shot (non-watch) invocation. Until then, every build is a full rebuild (FR-BUILD-1). See `next-steps.md` Phase 3. | Could | Blocked |
 | FR-BUILD-7 | On each `POLL_INTERVAL` tick, the daemon SHALL resolve `/vault/current` to a concrete directory (`realpath`, not a raw `readlink`) and compare it to the value at its last build; a build (FR-BUILD-1) SHALL fire only when it differs, using that same resolved directory as the build input. This replaces v0.2's `git fetch`-based change detection (FR-POLL-2) now that sync is external (§9.2). | Must | Implemented (`src/vault.ts`) |
 | FR-BUILD-8 | The daemon MAY be configured to trigger a build via an inbound webhook call from git-sync instead of polling `/vault/current` (FR-BUILD-7), for near-instant builds instead of `POLL_INTERVAL`-bounded latency. Deferred — see `next-steps.md`. | Could | Planned |
@@ -224,8 +226,8 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 | Data | Location | Notes |
 |---|---|---|
 | Vault git clone | `/vault` (hostPath) | Persists across pod restarts; written only by git-sync (rw); daemon mounts read-only and reads `/vault/current` |
-| Built static site | `/site` (hostPath) | Persists across pod restarts; always a complete, consistent snapshot |
-| Build staging | `/site-next` | Ephemeral; created per build, renamed to `/site` on success, deleted on failure |
+| Built static site | `/site/current` (subdirectory of the `/site` hostPath mount) | Persists across pod restarts; always a complete, consistent snapshot |
+| Build staging | `/site/next` | Ephemeral; created per build, renamed to `/site/current` on success, deleted on failure |
 | quartz config | `node_modules/@jackyzha0/quartz/quartz.config.yaml` | Must live inside the installed quartz package — quartz resolves config relative to `process.cwd()`, not its install path (see `agents.md`). Default baked into image; overridable via ConfigMap mount |
 | SSH deploy key | `SSH_KEY_PATH` (K8s Secret mount) | Must be `0400`; mounted into the git-sync container only, read at its startup — the daemon container never has this key |
 
@@ -255,8 +257,8 @@ Minimum viable observability for initial deployment:
 | Signal | Mechanism |
 |---|---|
 | Build success / failure | Logged to stdout with timestamp and vault HEAD SHA |
-| Last successful build | Logged; optionally written to `/site/.build-info` |
-| Pod liveness | Standard Kubernetes liveness probe (file existence check on `/site/index.html`) |
+| Last successful build | Logged; optionally written to `/site/current/.build-info` |
+| Pod liveness | Standard Kubernetes liveness probe (file existence check on `/site/current/index.html`) |
 
 Prometheus metrics are specified (NFR-OBS-1, NFR-OBS-2; Status: Planned, Phase 2 — see `next-steps.md`). A Grafana dashboard remains deferred.
 
