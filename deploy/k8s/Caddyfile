@@ -1,0 +1,8 @@
+# Serves the builder's promoted output. /site/current is a symlink target that gets
+# swapped via two renames (RISK-6), never edited in place, so file_server always sees
+# either the old or the new tree, never a mix.
+:80 {
+	root * /site/current
+	file_server
+	encode gzip
+}

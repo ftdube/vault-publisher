@@ -2,7 +2,7 @@
 
 A self-contained Docker daemon that builds an Obsidian vault as a static site using [Quartz](https://quartz.jzhao.xyz/) whenever a [`git-sync`](https://github.com/kubernetes/git-sync) sidecar pulls a change, and serves it via a Caddy sidecar — no CronJob orchestration, no manual rebuild triggers.
 
-> **Note:** verified end-to-end against a real `git-sync` sidecar and a throwaway sample vault — see `next-steps.md`'s Verify item. K8s manifests for the three-container Pod are still not written.
+> **Note:** verified end-to-end (including Caddy) against a real `git-sync` sidecar and a throwaway sample vault — see `next-steps.md`'s Verify items. K8s manifests exist in `deploy/k8s/` but haven't been applied to a live cluster yet.
 
 ## How it works
 
@@ -41,6 +41,8 @@ Two `hostPath` volumes are shared:
 | `/site` | hostPath mount; `current`/`next`/`old` live as subdirectories inside it (the mount point itself can't be renamed — see `agents.md`). Caddy serves `/site/current`, which persists across restarts |
 
 A `nodeSelector` is required because `hostPath` ties the Pod to one node.
+
+Ready-to-adapt manifests live in [`deploy/k8s/`](deploy/k8s/) (`kubectl kustomize deploy/k8s`). Copy `secret.example.yaml`, fill in real values, and replace the `REPLACE_WITH_*` placeholders in `deployment.yaml` and `configmap.yaml` before applying. For local end-to-end testing without a cluster, see `docker-compose.verify.yml`.
 
 ## Environment variables
 

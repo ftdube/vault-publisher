@@ -3,3 +3,4 @@ node_modules/
 *.lock
 .claude/settings.local.json
 dist/
+deploy/verify/sample-vault.git/
