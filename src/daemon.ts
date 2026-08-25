@@ -23,7 +23,13 @@ let lastBuiltRef: string | null = null
 async function pollOnce(): Promise<void> {
   const currentRef = readVaultCurrentRef()
   if (currentRef === null) {
-    log("Waiting for git-sync's first sync (/vault/current not present yet)")
+    // Distinguish "never synced yet" from "synced content vanished" (RISK-9, e.g. a
+    // git-sync GC or a lost mount) — both hit the same ENOENT, but only the first is benign.
+    if (lastBuiltRef === null) {
+      log("Waiting for git-sync's first sync (/vault/current not present yet)")
+    } else {
+      logError(`/vault/current disappeared after a previous successful build (was ${lastBuiltRef}) — still serving that build, but this is not a startup state`)
+    }
     return
   }
 

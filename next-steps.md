@@ -16,7 +16,9 @@
 
 The daemon and Dockerfile were written and the underlying quartz invocation was verified manually (real `npm install` of the git dependency, real `quartz build` against an external content dir, real plugin pre-bake, real `envsubst` run) — but Docker wasn't running in the environment that wrote this code, so the image itself has never been built or run, and the daemon's poll loop has never executed end-to-end. `/vault/current`, `/site`, `/site-next` are hardcoded absolute paths, so this can only be tested in a container (with a real git-sync sidecar populating `/vault/current`), not on a bare host.
 
-**Trigger:** before first real deployment — `docker build`, then `docker run` alongside a `git-sync` sidecar against a real (even tiny) vault repo and confirm a site actually gets published to `/site`.
+**Trigger:** before first real deployment — `docker build`, then `docker run` alongside a `git-sync` sidecar against a real (even tiny) vault repo and confirm a site actually gets published to `/site`. While at it, also confirm:
+- `/vault/current` tracks `VAULT_BRANCH` specifically, not some other ref (`agent-archive.md`'s refspec-gotcha note, RISK-10)
+- git-sync's rev directories are named deterministically by content (RISK-10), not something that would cause spurious rebuilds
 
 ## quartz.config.yaml delivery — decided
 
