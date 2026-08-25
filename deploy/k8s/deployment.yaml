@@ -1,0 +1,120 @@
+# EXAMPLE — see deploy/k8s/README.md. Copy and adapt; replace every REPLACE_* value
+# before applying.
+#
+# Three-container Pod per BRD §8: git-sync (clone/pull), builder (this repo, quartz
+# build + atomic promote), caddy (serve). hostPath ties the Pod to one node, hence
+# nodeSelector below and strategy: Recreate — two Pods must never bind the same
+# hostPath concurrently (FR-BUILD-2's two-step rename assumes a single writer).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-publisher
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vault-publisher
+  template:
+    metadata:
+      labels:
+        app: vault-publisher
+      annotations:
+        # NFR-OBS-2 — daemon exposes Prometheus metrics on :9090/metrics (Phase 2,
+        # see next-steps.md; scrape config is inert until the endpoint exists).
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      # hostPath binds this Pod to one node's local disk — REPLACE with the target node.
+      nodeSelector:
+        kubernetes.io/hostname: REPLACE_WITH_NODE_NAME
+      containers:
+        - name: git-sync
+          image: registry.k8s.io/git-sync/git-sync:v4.2.4
+          # RISK-9: if git-sync's rev-retention window is shorter than the slowest
+          # build, a build can fail mid-read when its pinned rev gets GC'd. Retention
+          # flag/behavior not verified against this pinned tag — check before relying on it.
+          env:
+            - name: GITSYNC_REPO
+              valueFrom:
+                secretKeyRef:
+                  name: vault-publisher-repo
+                  key: VAULT_REPO_URL
+            - name: GITSYNC_BRANCH
+              valueFrom:
+                configMapKeyRef:
+                  name: vault-publisher-config
+                  key: VAULT_BRANCH
+            - name: GITSYNC_PERIOD
+              valueFrom:
+                configMapKeyRef:
+                  name: vault-publisher-config
+                  key: VAULT_SYNC_PERIOD
+            - name: GITSYNC_ROOT
+              value: /vault
+            - name: GITSYNC_LINK
+              value: current
+            - name: GITSYNC_SSH
+              value: "true"
+            - name: GITSYNC_SSH_KEY_FILE
+              value: /ssh/id_ed25519
+          volumeMounts:
+            - name: vault
+              mountPath: /vault
+            - name: ssh-key
+              mountPath: /ssh
+              readOnly: true
+        - name: builder
+          image: ghcr.io/OWNER/vault-publisher:latest # replace OWNER
+          envFrom:
+            - configMapRef:
+                name: vault-publisher-config
+          volumeMounts:
+            - name: vault
+              mountPath: /vault
+              readOnly: true
+            - name: site
+              mountPath: /site
+        - name: caddy
+          image: caddy:alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: site
+              mountPath: /site
+              readOnly: true
+            - name: caddyfile
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+              readOnly: true
+          # readinessProbe, not livenessProbe: RISK-2's one-time pre-first-build 404
+          # window must gate traffic, not restart a container that isn't actually broken.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 30
+      volumes:
+        # REPLACE both hostPath.path values with real node-local directories.
+        - name: vault
+          hostPath:
+            path: /mnt/vault-publisher/vault
+            type: DirectoryOrCreate
+        - name: site
+          hostPath:
+            path: /mnt/vault-publisher/site
+            type: DirectoryOrCreate
+        - name: ssh-key
+          secret:
+            secretName: vault-publisher-ssh-key
+            defaultMode: 0400
+            items:
+              - key: id_ed25519
+                path: id_ed25519
+        - name: caddyfile
+          configMap:
+            name: vault-publisher-caddyfile

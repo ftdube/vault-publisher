@@ -1,0 +1,47 @@
+# Local stand-in for the three-container k8s Pod (BRD §8), used to verify the
+# git-sync -> builder -> Caddy chain end-to-end before committing to k8s manifests.
+# Not for production use: named volumes stand in for hostPath, and git-sync points at
+# a throwaway local bare repo instead of a real remote.
+#
+# Usage:
+#   ./deploy/verify/make-sample-vault.sh
+#   docker compose -f docker-compose.verify.yml up --build
+#   curl http://localhost:8080/
+services:
+  git-sync:
+    image: registry.k8s.io/git-sync/git-sync:v4.2.4
+    user: root # named volume is root-owned; hostPath perms are a k8s-manifest concern, not this rig's
+    volumes:
+      - vault:/vault
+      - ./deploy/verify/sample-vault.git:/repo:ro
+    command:
+      - --repo=file:///repo
+      - --root=/vault
+      - --link=current
+      - --period=10s
+
+  builder:
+    build: .
+    volumes:
+      - vault:/vault:ro
+      - site:/site
+    environment:
+      QUARTZ_BASE_URL: localhost:8080
+      QUARTZ_PAGE_TITLE: Verify Vault
+      POLL_INTERVAL: "5"
+    depends_on:
+      - git-sync
+
+  caddy:
+    image: caddy:alpine
+    volumes:
+      - site:/site:ro
+      - ./deploy/k8s/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - builder
+
+volumes:
+  vault:
+  site:

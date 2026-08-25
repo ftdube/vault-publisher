@@ -1,0 +1,12 @@
+# EXAMPLE — see deploy/k8s/README.md. Replace QUARTZ_BASE_URL before applying.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-publisher-config
+data:
+  VAULT_BRANCH: "main"
+  VAULT_SYNC_PERIOD: "300"
+  POLL_INTERVAL: "300"
+  QUARTZ_PAGE_TITLE: "My Vault"
+  # No protocol, no trailing slash (README.md). Replace before applying.
+  QUARTZ_BASE_URL: "vault.example.com"

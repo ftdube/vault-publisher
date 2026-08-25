@@ -5,12 +5,12 @@
 | Field | Value |
 |---|---|
 | Document title | Business Requirements Document — vault-publisher |
-| Document version | 0.5 (Draft) |
-| System version documented | Daemon side of the git-sync sidecar architecture implemented and verified end-to-end (`next-steps.md` Verify item, issue #4). §9.2's FR-SYNC-* (the git-sync sidecar itself, and K8s manifests) remain Planned — this repo has no K8s manifests yet. |
+| Document version | 0.6 (Draft) |
+| System version documented | Daemon, git-sync sidecar, and Caddy serving verified end-to-end (`next-steps.md` Verify items, issue #4). K8s manifests for the three-container Pod exist in `deploy/k8s/` and are structurally validated (`kubectl kustomize`), but not yet applied to a live cluster. |
 | Date | 2026-08-25 |
 | Author | Claude Code, on behalf of the repository owner |
 | Classification | Public |
-| Related artifacts | [`agents.md`](agents.md), [`RISKS.md`](RISKS.md), [`README.md`](README.md), [`next-steps.md`](next-steps.md) |
+| Related artifacts | [`agents.md`](agents.md), [`RISKS.md`](RISKS.md), [`README.md`](README.md), [`next-steps.md`](next-steps.md), [`deploy/k8s/`](deploy/k8s/) |
 
 ### Revision History
 
@@ -21,6 +21,7 @@
 | 0.3 | 2026-08-24 | Proposed architecture change (docs only, no code yet): vault git cloning/pulling is delegated from the daemon to a dedicated `git-sync` sidecar (§8, §9.2). The daemon narrows to detecting a local checkout change and running the build; it no longer touches git, `VAULT_REPO_URL`, or the SSH deploy key at all. FR-POLL-* superseded by FR-SYNC-* (§9.2); FR-BUILD-1's `-d` path changes from `/vault` to `/vault/current`; `/vault` becomes daemon-read-only. `POLL_INTERVAL` now paces the daemon's local checkout check, not a network fetch — `VAULT_SYNC_PERIOD` is a new, separate var pacing git-sync's own fetch cadence. Default change-detection is self-poll (daemon reads git-sync's `current` symlink); a configurable webhook-push alternative is deferred (`next-steps.md`). See Appendix B for why this doesn't repeat the three-moving-parts problem §2 describes. |
 | 0.4 | 2026-08-24 | Daemon side of v0.3 implemented — see `next-steps.md`'s "Phase 1.5 — git-sync sidecar" section for what changed. Typecheck and unit tests pass; Docker build/run still unverified end-to-end. FR-SYNC-1..5 (the git-sync sidecar container itself, and K8s manifests) remain Planned — out of this repo's code. |
 | 0.5 | 2026-08-25 | Verify step executed: real image build, real `git-sync:v4.2.4` sidecar, real (throwaway) sample vault. Found and fixed a launch-blocking bug (issue #4, RISK-6): `/site` is the hostPath mount point itself, and `rename(2)` refuses to rename a mount point (`EBUSY`) even when empty — every promotion was failing, so the site never published at all. Fixed by moving `current`/`next`/`old` to be sibling subdirectories under `/site` instead of top-level mount paths (FR-BUILD-1/2 updated accordingly); Caddy's document root is now `/site/current`, not `/site`. Re-verified after the fix: build succeeds, a second vault commit triggers a rebuild, output is correctly published. Also confirmed RISK-10 (git-sync worktree dirs are named deterministically by commit SHA) and that `/vault/current` tracks the configured branch. |
+| 0.6 | 2026-08-25 | Caddy integration verified end-to-end (previously untested — the v0.5 Verify pass covered git-sync/build/promote but not serving): a real Caddy container against the same throwaway sample vault served the build correctly and stayed at 200 across a rebuild/promotion cycle under continuous request load (`next-steps.md`). K8s manifests for the three-container Pod written (`deploy/k8s/`) — FR-SYNC-1..5, NFR-SEC-1 move to Implemented (manifest declares the behavior; git-sync's own runtime behavior beyond §9.2/RISK-10's scope, and the manifest's correctness against a live cluster, remain unverified — no cluster was available). NFR-OBS-2's annotations added to the Deployment template ahead of Phase 2 (inert until `:9090/metrics` exists). |
 
 ### Approval
 
@@ -181,11 +182,11 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
-| FR-SYNC-1 | On startup, git-sync SHALL clone `VAULT_REPO_URL` into `/vault` (its `--root`) if not already present; otherwise it SHALL pull. It SHALL maintain a `current` symlink (`--link=current`) inside `/vault` that always points at the latest successfully synced worktree. | Must | Planned |
-| FR-SYNC-2 | git-sync SHALL sync on `VAULT_SYNC_PERIOD` seconds (`--period`). | Must | Planned |
-| FR-SYNC-3 | SSH key at `SSH_KEY_PATH` SHALL be used for git operations when present (`--ssh`, `--ssh-key-file`); HTTPS is used otherwise. | Must | Planned |
-| FR-SYNC-4 | A sync failure SHALL be logged and retried on git-sync's own backoff; it SHALL NOT stop the `current` symlink from pointing at the last good sync, and SHALL NOT crash the sidecar. | Must | Planned |
-| FR-SYNC-5 | `/vault` SHALL be mounted read-write by the git-sync container and read-only by the daemon container. | Must | Planned |
+| FR-SYNC-1 | On startup, git-sync SHALL clone `VAULT_REPO_URL` into `/vault` (its `--root`) if not already present; otherwise it SHALL pull. It SHALL maintain a `current` symlink (`--link=current`) inside `/vault` that always points at the latest successfully synced worktree. | Must | Implemented (`deploy/k8s/deployment.yaml`; behavior itself confirmed via `docker-compose.verify.yml`, not the manifest directly — no live cluster available) |
+| FR-SYNC-2 | git-sync SHALL sync on `VAULT_SYNC_PERIOD` seconds (`--period`). | Must | Implemented (as above) |
+| FR-SYNC-3 | SSH key at `SSH_KEY_PATH` SHALL be used for git operations when present (`--ssh`, `--ssh-key-file`); HTTPS is used otherwise. | Must | Implemented (manifest only — SSH auth itself still unverified, see `next-steps.md`'s Verify item) |
+| FR-SYNC-4 | A sync failure SHALL be logged and retried on git-sync's own backoff; it SHALL NOT stop the `current` symlink from pointing at the last good sync, and SHALL NOT crash the sidecar. | Must | Planned (upstream git-sync behavior, not something this repo configures or has verified) |
+| FR-SYNC-5 | `/vault` SHALL be mounted read-write by the git-sync container and read-only by the daemon container. | Must | Implemented (`deploy/k8s/deployment.yaml`) |
 
 ### 9.3 Daemon — Build (`BUILD`)
 
@@ -244,10 +245,10 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
-| NFR-SEC-1 | SSH deploy keys SHALL be read-only (`0400`) and mounted from a K8s Secret into the git-sync container, never committed to the repo. | Must | Planned |
-| NFR-SEC-2 | The git-sync sidecar SHALL NOT push to the vault repo; it clones/pulls only. Nothing else in the Pod has git access. | Must | Planned |
-| NFR-SEC-3 | No personal identifiers SHALL be committed to this repository (see C1). | Must | Planned |
-| NFR-SEC-4 | The built static site is unauthenticated by design; access control is the ingress layer's responsibility. | Must | Planned |
+| NFR-SEC-1 | SSH deploy keys SHALL be read-only (`0400`) and mounted from a K8s Secret into the git-sync container, never committed to the repo. | Must | Implemented (`deploy/k8s/deployment.yaml`'s `ssh-key` volume, `defaultMode: 0400`; `secret.example.yaml` is a template, never real key material) |
+| NFR-SEC-2 | The git-sync sidecar SHALL NOT push to the vault repo; it clones/pulls only. Nothing else in the Pod has git access. | Must | Implemented (manifest grants no other container git access; git-sync's own push behavior is upstream, unverified here) |
+| NFR-SEC-3 | No personal identifiers SHALL be committed to this repository (see C1). | Must | Implemented (`deploy/k8s/` uses placeholders — `REPLACE_WITH_NODE_NAME`, `vault.example.com`, `git@example.com:...` — not real values) |
+| NFR-SEC-4 | The built static site is unauthenticated by design; access control is the ingress layer's responsibility. | Must | Implemented (`deploy/k8s/service.yaml` is ClusterIP only; no auth, ingress is explicitly out of scope) |
 | NFR-SEC-5 | The daemon container SHALL have no access to the SSH deploy key or any git credential, and SHALL mount `/vault` read-only. | Must | Implemented (code has no git/SSH access; the read-only mount itself is a K8s manifest concern, still Planned) |
 
 ## 13. Observability & Monitoring Requirements
@@ -258,7 +259,7 @@ Minimum viable observability for initial deployment:
 |---|---|
 | Build success / failure | Logged to stdout with timestamp and vault HEAD SHA |
 | Last successful build | Logged; optionally written to `/site/current/.build-info` |
-| Pod liveness | Standard Kubernetes liveness probe (file existence check on `/site/current/index.html`) |
+| Pod readiness | `readinessProbe` (HTTP GET `/` on the caddy container, `deploy/k8s/deployment.yaml`) — deliberately readiness, not liveness, so RISK-2's one-time pre-first-build window gates traffic instead of crash-looping a container that isn't actually broken |
 
 Prometheus metrics are specified (NFR-OBS-1, NFR-OBS-2; Status: Planned, Phase 2 — see `next-steps.md`). A Grafana dashboard remains deferred.
 

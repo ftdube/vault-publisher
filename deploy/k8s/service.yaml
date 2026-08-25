@@ -1,0 +1,14 @@
+# EXAMPLE — see deploy/k8s/README.md.
+#
+# ClusterIP only — TLS termination and routing are the ingress layer's job (BRD §11),
+# out of scope here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-publisher
+spec:
+  selector:
+    app: vault-publisher
+  ports:
+    - port: 80
+      targetPort: 80

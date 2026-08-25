@@ -9,8 +9,12 @@
 | Default `quartz.config.yaml` with env var placeholders | Implemented | Baked into image (decided — see below) |
 | CI: `ci.yml` (typecheck/test/scan/build/push) to GHCR | Implemented | "lint" renamed to "typecheck" — there's no ESLint config, just `tsc --noEmit` |
 | Unit tests: `src/*.test.ts` via `node:test` (through `tsx`, not compiled) | Implemented | Covers `env.ts`/`log.ts`/`build.ts`'s `substituteConfig`/`vault.ts`'s `readVaultCurrentRef` (real symlinks in a tmpdir). Rename/build-info promotion in `build.ts` needs a real mounted `/site` (a mount point behaves differently than a tmpdir — see Verify item below) — covered by the Docker-based Verify pass, not by a unit test |
-| K8s deployment docs: three-container Pod (git-sync, builder, Caddy), hostPath, nodeSelector | Planned | Container count depends on Phase 1.5 (git-sync sidecar) landing first |
+| K8s deployment docs: three-container Pod (git-sync, builder, Caddy), hostPath, nodeSelector | Implemented | `deploy/k8s/` (Deployment, Service, ConfigMap, `secret.example.yaml`, `Caddyfile`, kustomization). Renders cleanly via `kubectl kustomize`; not yet applied to a real cluster — see Verify item below |
 | Health check for the served site | Planned | Every new service gets a Gatus (or equivalent) check once deployed |
+
+## Verify — Caddy integration — Done (2026-08-25)
+
+Not covered by the original Verify pass below: whether Caddy actually serves `/site/current` and survives the two-step promotion rename (RISK-6) without erroring. Ran the full chain (git-sync → builder → Caddy) via `docker-compose.verify.yml` and a throwaway sample vault (`deploy/verify/make-sample-vault.sh`): first build served correctly (HTTP 200, real Quartz output), then a second vault commit triggered a rebuild and promotion while under continuous request load — 105/105 requests returned 200 across the rebuild window, new content served immediately after. `deploy/k8s/deployment.yaml`'s manifests were written from this same verified Caddyfile/config, then validated structurally with `kubectl kustomize` (no live cluster available to `kubectl apply` against yet).
 
 ## Verify — build and run the actual image — Done (2026-08-25)
 
@@ -34,8 +38,9 @@ Remaining, not yet done (needs a real git-sync sidecar to verify against, and th
 
 | Item | Notes |
 |---|---|
-| Add `registry.k8s.io/git-sync/git-sync` to K8s deployment docs, pinned tag, with rev-retention configured longer than the slowest expected build | Folds into Phase 1's still-Planned "K8s deployment docs" item; pinning addresses RISK-8, retention addresses RISK-9 |
+| Add `registry.k8s.io/git-sync/git-sync` to K8s deployment docs, pinned tag, with rev-retention configured longer than the slowest expected build | Done: `deploy/k8s/deployment.yaml` pins `:v4.2.4` (RISK-8). Retention itself still open — see RISK-9 |
 | Verify end-to-end against a real git-sync sidecar | See "Verify — build and run the actual image" above; unit tests only cover `readVaultCurrentRef` against a synthetic symlink, not a real git-sync process |
+| Apply `deploy/k8s/` to a real cluster | Only `kubectl kustomize`-validated so far (schema/reference correctness), never `kubectl apply`-ed against a live k3s cluster |
 
 ### Configurable trigger mode: webhook vs poll
 
