@@ -23,3 +23,5 @@ Daemon that builds an Obsidian vault as a static site with Quartz whenever a `gi
 - the image build logs `✗ Failed to install plugin` for `canvas-page`/`bases-page`/`note-properties` — confirmed harmless (a `tsup` DTS-generation-only failure); the plugins' JS still builds and works. See `agent-archive.md`
 - SSH deploy key must be mounted `0400` into the `git-sync` container, not the daemon; the default K8s Secret mode (`0644`) is rejected by SSH
 - `POLL_INTERVAL` paces the daemon's check of `/vault/current`, not a fetch — `git-sync`'s own `VAULT_SYNC_PERIOD` paces the actual fetch; a build only fires when the symlink target changes
+- `fsGroup` does NOT apply to `hostPath` volumes (unlike PVCs) — can't use it to hand a non-root UID write access; a root `initContainer` chowning the volumes is required instead (issue #8)
+- `git-sync` needs `GITSYNC_ADD_USER=true` to use SSH under a non-default UID — without it, git fails with `No user exists for uid <N>` (issue #8)
