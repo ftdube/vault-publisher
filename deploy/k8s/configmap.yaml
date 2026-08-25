@@ -1,3 +1,4 @@
+# EXAMPLE — see deploy/k8s/README.md. Replace QUARTZ_BASE_URL before applying.
 apiVersion: v1
 kind: ConfigMap
 metadata:

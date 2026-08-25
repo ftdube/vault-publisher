@@ -1,3 +1,6 @@
+# EXAMPLE — see deploy/k8s/README.md. Copy and adapt; replace every REPLACE_* value
+# before applying.
+#
 # Three-container Pod per BRD §8: git-sync (clone/pull), builder (this repo, quartz
 # build + atomic promote), caddy (serve). hostPath ties the Pod to one node, hence
 # nodeSelector below and strategy: Recreate — two Pods must never bind the same
