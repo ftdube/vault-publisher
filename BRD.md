@@ -5,8 +5,8 @@
 | Field | Value |
 |---|---|
 | Document title | Business Requirements Document — vault-publisher |
-| Document version | 0.6 (Draft) |
-| System version documented | Daemon, git-sync sidecar, and Caddy serving verified end-to-end (`next-steps.md` Verify items, issue #4). K8s manifests for the three-container Pod exist in `deploy/k8s/` and are structurally validated (`kubectl kustomize`), but not yet applied to a live cluster. |
+| Document version | 0.7 (Draft) |
+| System version documented | Daemon, git-sync sidecar, and Caddy serving verified end-to-end (`next-steps.md` Verify items, issue #4). K8s manifests for the three-container Pod exist in `deploy/k8s/` and are structurally validated (`kubectl kustomize`), but not yet applied to a live cluster. A documentation/implementation gap audit (v0.7) found and fixed several manifest-level issues (SSH host-key checking, a `VAULT_SYNC_PERIOD` duration-format bug, missing resource limits) that a live-cluster apply had not yet exercised. |
 | Date | 2026-08-25 |
 | Author | Claude Code, on behalf of the repository owner |
 | Classification | Public |
@@ -22,6 +22,7 @@
 | 0.4 | 2026-08-24 | Daemon side of v0.3 implemented — see `next-steps.md`'s "Phase 1.5 — git-sync sidecar" section for what changed. Typecheck and unit tests pass; Docker build/run still unverified end-to-end. FR-SYNC-1..5 (the git-sync sidecar container itself, and K8s manifests) remain Planned — out of this repo's code. |
 | 0.5 | 2026-08-25 | Verify step executed: real image build, real `git-sync:v4.2.4` sidecar, real (throwaway) sample vault. Found and fixed a launch-blocking bug (issue #4, RISK-6): `/site` is the hostPath mount point itself, and `rename(2)` refuses to rename a mount point (`EBUSY`) even when empty — every promotion was failing, so the site never published at all. Fixed by moving `current`/`next`/`old` to be sibling subdirectories under `/site` instead of top-level mount paths (FR-BUILD-1/2 updated accordingly); Caddy's document root is now `/site/current`, not `/site`. Re-verified after the fix: build succeeds, a second vault commit triggers a rebuild, output is correctly published. Also confirmed RISK-10 (git-sync worktree dirs are named deterministically by commit SHA) and that `/vault/current` tracks the configured branch. |
 | 0.6 | 2026-08-25 | Caddy integration verified end-to-end (previously untested — the v0.5 Verify pass covered git-sync/build/promote but not serving): a real Caddy container against the same throwaway sample vault served the build correctly and stayed at 200 across a rebuild/promotion cycle under continuous request load (`next-steps.md`). K8s manifests for the three-container Pod written (`deploy/k8s/`) — FR-SYNC-1..5, NFR-SEC-1 move to Implemented (manifest declares the behavior; git-sync's own runtime behavior beyond §9.2/RISK-10's scope, and the manifest's correctness against a live cluster, remain unverified — no cluster was available). NFR-OBS-2's annotations added to the Deployment template ahead of Phase 2 (inert until `:9090/metrics` exists). |
+| 0.7 | 2026-08-25 | Documentation/implementation gap audit against `deploy/k8s/` and `src/`, all still unverified against a live cluster: (1) `configmap.yaml`'s `VAULT_SYNC_PERIOD` default changed from a bare `"300"` to `"300s"` — git-sync parses `GITSYNC_PERIOD` as a Go duration, which requires a unit; a bare integer would have failed to parse on first apply, uncaught by the Docker-based Verify pass because it hardcodes `--period=10s` directly instead of going through this env var. (2) `deployment.yaml`'s git-sync container now sets `GITSYNC_SSH_KNOWN_HOSTS=false`, since no known_hosts file is mounted and git-sync defaults to strict host-key checking — the SSH path was already flagged unverified in `next-steps.md`; this was the specific reason it would have failed. (3) `SSH_KEY_PATH` moved from a hardcoded literal in `deployment.yaml` to a `configmap.yaml` key both containers reference, per One Source of Truth. (4) Added `resources.limits`/`requests` to the `builder` container — RISK-5's mitigation was documented but absent from the manifest. (5) FR-CFG-3 corrected from Planned to Implemented (the code already supports a mounted config override; only the manifest example and docs were missing). (6) §8's `:9090/metrics` narrative corrected to read as not-yet-implemented, matching NFR-OBS-1's status. (7) `README.md`'s `.build-info` troubleshooting path corrected to `current/.build-info`. |
 
 ### Approval
 
@@ -99,6 +100,7 @@ The replacement design addresses all three: quartz as a versioned npm dependency
 - **C1.** The image must contain no personal identifiers — no domains, hostnames, usernames, vault content, or personal infrastructure specifics.
 - **C2.** Build output must never be partially visible during a write. Atomic rename from a staging path is mandatory.
 - **C3.** quartz (`@jackyzha0/quartz`, installed via a git-ref-pinned dependency — it is `private: true` and not published to the npm registry) must remain unpatched. Any required behavior change must be achieved via config, not code patches.
+- **C4.** The system only publishes Obsidian features natively supported by the upstream Quartz parser; unsupported elements (e.g., Canvas, Excalidraw, complex plugins) will degrade gracefully or be ignored.
 
 ## 7. Glossary
 
@@ -159,7 +161,7 @@ Vault git repo (any host — SSH or HTTPS)
          Traefik ingress → Cloudflare Tunnel → Browser
 ```
 
-The daemon also exposes `:9090/metrics` (Prometheus text exposition format), scraped in-cluster by VictoriaMetrics via `prometheus.io/*` Pod annotations — not routed through Traefik/ingress (NFR-OBS-1, NFR-OBS-2). git-sync's own metrics are out of scope for this pass (`next-steps.md`).
+The daemon will also expose `:9090/metrics` (Prometheus text exposition format), scraped in-cluster by VictoriaMetrics via `prometheus.io/*` Pod annotations — not routed through Traefik/ingress (NFR-OBS-1, NFR-OBS-2). **Not yet implemented** — the annotations are already on the Deployment template (inert until the endpoint exists), but no metrics code exists in `src/` yet; see Phase 2, `next-steps.md`. git-sync's own metrics are out of scope for this pass (`next-steps.md`).
 
 Component responsibilities:
 
@@ -200,6 +202,7 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 | FR-BUILD-6 | A build SHOULD be incremental, rebuilding only files changed since the last build, once quartz supports this for a one-shot (non-watch) invocation. Until then, every build is a full rebuild (FR-BUILD-1). See `next-steps.md` Phase 3. | Could | Blocked |
 | FR-BUILD-7 | On each `POLL_INTERVAL` tick, the daemon SHALL resolve `/vault/current` to a concrete directory (`realpath`, not a raw `readlink`) and compare it to the value at its last build; a build (FR-BUILD-1) SHALL fire only when it differs, using that same resolved directory as the build input. This replaces v0.2's `git fetch`-based change detection (FR-POLL-2) now that sync is external (§9.2). | Must | Implemented (`src/vault.ts`) |
 | FR-BUILD-8 | The daemon MAY be configured to trigger a build via an inbound webhook call from git-sync instead of polling `/vault/current` (FR-BUILD-7), for near-instant builds instead of `POLL_INTERVAL`-bounded latency. Deferred — see `next-steps.md`. | Could | Planned |
+| FR-BUILD-9 | The daemon SHALL NOT initiate a new build if a previous build is still in progress (e.g., if a build takes longer than `POLL_INTERVAL`). | Must | Planned |
 
 ### 9.4 Configuration (`CFG`)
 
@@ -207,7 +210,7 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 |---|---|---|---|
 | FR-CFG-1 | All site-specific parameters (`QUARTZ_BASE_URL`, `QUARTZ_PAGE_TITLE`) SHALL be injected via environment variables into the daemon container, not baked into the image. Vault-access parameters (`VAULT_REPO_URL`, `VAULT_BRANCH`, `SSH_KEY_PATH`, `VAULT_SYNC_PERIOD`) are injected the same way into the git-sync container instead (§9.2) — the daemon no longer receives them. | Must | Implemented |
 | FR-CFG-2 | A default `quartz.config.yaml` SHALL be included in the image, with `${QUARTZ_*}` placeholders, covering a working general-purpose Quartz configuration. | Must | Implemented |
-| FR-CFG-3 | Operators MAY override the default config by mounting a custom `quartz.config.yaml` at the app root. | Should | Planned |
+| FR-CFG-3 | Operators MAY override the default config by mounting a custom `quartz.config.yaml` at the app root. | Should | Implemented (`substituteConfig` in `src/build.ts` always reads `quartz.config.yaml` from `process.cwd()`, unconditionally — a mounted override needs no daemon code change; documented in `README.md`. Not yet exercised against a real ConfigMap mount) |
 
 **Non-Functional**
 
@@ -248,7 +251,7 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 | NFR-SEC-1 | SSH deploy keys SHALL be read-only (`0400`) and mounted from a K8s Secret into the git-sync container, never committed to the repo. | Must | Implemented (`deploy/k8s/deployment.yaml`'s `ssh-key` volume, `defaultMode: 0400`; `secret.example.yaml` is a template, never real key material) |
 | NFR-SEC-2 | The git-sync sidecar SHALL NOT push to the vault repo; it clones/pulls only. Nothing else in the Pod has git access. | Must | Implemented (manifest grants no other container git access; git-sync's own push behavior is upstream, unverified here) |
 | NFR-SEC-3 | No personal identifiers SHALL be committed to this repository (see C1). | Must | Implemented (`deploy/k8s/` uses placeholders — `REPLACE_WITH_NODE_NAME`, `vault.example.com`, `git@example.com:...` — not real values) |
-| NFR-SEC-4 | The built static site is unauthenticated by design; access control is the ingress layer's responsibility. | Must | Implemented (`deploy/k8s/service.yaml` is ClusterIP only; no auth, ingress is explicitly out of scope) |
+| NFR-SEC-4 | The built static site is unauthenticated by design; access control is the ingress layer's responsibility. If ingress lacks authentication, vault content is entirely public. | Must | Implemented (`deploy/k8s/service.yaml` is ClusterIP only; no auth, ingress is explicitly out of scope) |
 | NFR-SEC-5 | The daemon container SHALL have no access to the SSH deploy key or any git credential, and SHALL mount `/vault` read-only. | Must | Implemented (code has no git/SSH access; the read-only mount itself is a K8s manifest concern, still Planned) |
 
 ## 13. Observability & Monitoring Requirements
@@ -290,7 +293,7 @@ Prometheus metrics are specified (NFR-OBS-1, NFR-OBS-2; Status: Planned, Phase 2
 | `emptyDir` instead of `hostPath` | Full cold-start rebuild on every pod restart — unacceptable on RPi5 4GB |
 | Hand-roll git clone/fetch/SSH-key handling in the daemon (v0.1–0.2 approach) | Duplicates logic a purpose-built, widely-used upstream project (`git-sync`) already solves, including edge cases (shallow clones, auth retries, ref resolution) this repo never exercised in production. Delegating it also lets the daemon drop write access to `/vault` and the SSH key entirely, narrowing its blast radius (see NFR-SEC-5, issue #8). |
 | git-sync's `exechook` calling the daemon directly | `exechook` execs a command inside git-sync's own container filesystem — it cannot reach across the container boundary to invoke the daemon's `quartz build`. Ruled out for this reason, not on merit. |
-
-**Why three containers here doesn't repeat §2's "three moving parts" complaint:** the old CronJob design's three concerns (build, config injection via `envsubst` shell scripts, serving) were coupled through a forked quartz and had no single clear owner. This design's three containers — git-sync, daemon, Caddy — each own exactly one concern, communicate only through a read-only filesystem handoff (`/vault/current`, `/site`), and two of the three (git-sync, Caddy) are off-the-shelf, unpatched, zero-maintenance images. Only the daemon is custom code, and it is now *smaller* than the v0.2 daemon, not larger.
 | `quartz build --serve` as the entrypoint | Keeps quartz process resident in memory permanently; less RAM-efficient than ephemeral builds |
 | NAS-backed PVC for `/site` | Adds NAS dependency to serving path; `hostPath` is simpler and already used by Postgres on this cluster |
+
+**Why three containers here doesn't repeat §2's "three moving parts" complaint:** the old CronJob design's three concerns (build, config injection via `envsubst` shell scripts, serving) were coupled through a forked quartz and had no single clear owner. This design's three containers — git-sync, daemon, Caddy — each own exactly one concern, communicate only through a read-only filesystem handoff (`/vault/current`, `/site`), and two of the three (git-sync, Caddy) are off-the-shelf, unpatched, zero-maintenance images. Only the daemon is custom code, and it is now *smaller* than the v0.2 daemon, not larger.
