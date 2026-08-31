@@ -11,17 +11,16 @@ Daemon that builds an Obsidian vault as a static site with Quartz whenever a `gi
 
 ## Non-obvious gotchas
 
-- the daemon has no git code (`src/git.ts` deleted) — it only reads `/vault/current`, a symlink the `git-sync` sidecar maintains (BRD §9.2); `/vault` is mounted read-only by the daemon
-- quartz's build must run with cwd set to `node_modules/@jackyzha0/quartz` itself (config + build scripts resolve relative to `process.cwd()`) — running from the app root fails. See `agent-archive.md`
-- quartz has no native PWA/manifest support — dropped rather than patching quartz (see `agent-archive.md`)
+- no git code in the daemon (`src/git.ts` deleted) — reads git-sync's `/vault/current` symlink only (BRD §9.2); `/vault` is read-only for the daemon
+- quartz's build must run with cwd = `node_modules/@jackyzha0/quartz` (config/scripts resolve relative to `process.cwd()`, not install path) — see `agent-archive.md`
+- quartz has no native PWA/manifest support — dropped rather than patched (see `agent-archive.md`)
 - `hostPath` for `/vault` and `/site` ties the Pod to one node — `nodeSelector` required; loss of that node means service loss
-- `/site` itself is the hostPath mount point — `rename(2)` on it fails with `EBUSY` even when empty (confirmed live, issue #4); `current`/`next`/`old` live as subdirectories inside it instead. Caddy's root MUST be `/site/current`, not `/site`
+- `/site` is the hostPath mount point itself — `rename(2)` on it fails `EBUSY` even when empty (issue #4); `current`/`next`/`old` are subdirectories instead. Caddy's root MUST be `/site/current`
 - `/site/current` doesn't exist until the first build completes — Caddy 404s during that one-time window only
-- quartz's `node_modules` is baked into the image, never installed at runtime — see `agent-archive.md`
-- the daemon is TypeScript (`src/`), compiled to `dist/` in the Docker builder stage (`npm run build`) — `dist/` is gitignored, nothing runs `src/*.ts` directly
+- quartz's `node_modules` and community plugins are pre-baked into the image, never installed/built at runtime — see `agent-archive.md`
+- daemon is TypeScript (`src/`), compiled to `dist/` in the Docker builder stage — `dist/` gitignored, nothing runs `src/*.ts` directly
 - tests live in `tests/`, not `src/` — see `agent-archive.md`
-- the image build logs `✗ Failed to install plugin` for `canvas-page`/`bases-page`/`note-properties` — confirmed harmless (a `tsup` DTS-generation-only failure); the plugins' JS still builds and works. See `agent-archive.md`
-- SSH deploy key must be mounted `0400` into the `git-sync` container, not the daemon; the default K8s Secret mode (`0644`) is rejected by SSH
-- `POLL_INTERVAL` paces the daemon's check of `/vault/current`, not a fetch — `git-sync`'s own `VAULT_SYNC_PERIOD` paces the actual fetch; a build only fires when the symlink target changes
-- `fsGroup` does NOT apply to `hostPath` volumes (unlike PVCs) — can't use it to hand a non-root UID write access; a root `initContainer` chowning the volumes is required instead (issue #8)
-- `git-sync` needs `GITSYNC_ADD_USER=true` to use SSH under a non-default UID — without it, git fails with `No user exists for uid <N>` (issue #8)
+- image build logs `✗ Failed to install plugin` for 3 community plugins — confirmed-harmless `tsup` DTS-only failure, JS still works. See `agent-archive.md`
+- `POLL_INTERVAL` (plain seconds) paces the daemon's symlink check; `VAULT_SYNC_PERIOD` (a Go duration, e.g. `300s` — bare numbers fail) paces git-sync's own fetch — a build only fires when the symlink target changes
+- issue #8 (non-root containers): `fsGroup` doesn't apply to `hostPath`, so a root `initContainer` chowns both volumes; git-sync needs `GITSYNC_ADD_USER=true` for SSH under its non-root UID, mounts the deploy key `0400` (`0644` is rejected by SSH), and sets `GITSYNC_SSH_KNOWN_HOSTS=false` since no known_hosts is mounted
+- `build` is a required status check on `main`; CI must never skip the whole workflow (`paths-ignore`) or docs-only PRs deadlock waiting for `build` — instead a `changes` job gates the real work and `build` always reports
