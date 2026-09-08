@@ -7,14 +7,15 @@ This project has no releases or tags. The only supported version is the current
 
 ## Reporting a vulnerability
 
-Report it privately through GitHub: **Security -> Report a vulnerability** on this
-repository. That opens a private advisory visible only to the maintainer.
+Report it privately through GitHub: **Security → Report a vulnerability** on
+this repository. That opens a private security advisory, visible to this
+repository's maintainers and to GitHub — not publicly.
 
 Please do not open a public issue for a security problem.
 
-Especially in scope: anything that lets repository content reach the published
-site that the build was not meant to expose, or that lets the polled repository
-influence the host beyond the build output.
+Especially in scope is anything that lets repository content reach the published
+site when the build was not meant to expose it, or that lets the polled
+repository influence the host beyond the build output.
 
 ## What to expect
 
