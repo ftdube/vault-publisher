@@ -13,9 +13,11 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/vault-publisher
 
 jobs:
-  # Doc-only changes still need `build` to report — it's a required check —
-  # so gate the work here instead of skipping the workflow with paths-ignore
-  # (a skipped required check blocks the PR forever).
+  # Doc-only changes still need `build` to report — it's a required check — so
+  # gate the work here rather than skipping the workflow with paths-ignore.
+  # A job skipped by `if:` reports `skipped`, which SATISFIES a required check.
+  # A workflow that never runs reports nothing, and a required check that is
+  # never reported blocks the pull request forever. That is the difference.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -29,6 +31,7 @@ jobs:
             code:
               - "**"
               - "!**/*.md"
+              - "!*.md"
 
   typecheck:
     needs: changes
@@ -42,23 +45,7 @@ jobs:
           node-version: 26
           cache: npm
 
-      - name: CI Node agrees with the Dockerfile
-        run: |
-          want=$(grep -oE '^FROM node:[0-9]+' Dockerfile | cut -d: -f2 | sort -u)
-          if [ -z "$want" ]; then
-            echo "::error::could not parse any 'FROM node:<major>' line from Dockerfile"
-            exit 1
-          fi
-          if [ "$(printf '%s\n' "$want" | wc -l | tr -d ' ')" -ne 1 ]; then
-            echo "::error::Dockerfile stages disagree on the Node: $(printf '%s ' $want)"
-            exit 1
-          fi
-          have=$(node -p 'process.versions.node.split(".")[0]')
-          if [ "$want" != "$have" ]; then
-            echo "::error::Dockerfile builds on Node $want but CI is testing on $have"
-            exit 1
-          fi
-          echo "Node $have matches the Dockerfile"
+      - run: bash scripts/ci-node-matches-dockerfile.sh
 
       - run: npm ci
       - run: npm run typecheck
@@ -74,6 +61,8 @@ jobs:
         with:
           node-version: 26
           cache: npm
+
+      - run: bash scripts/ci-node-matches-dockerfile.sh
 
       - run: npm ci
       - run: npm test
