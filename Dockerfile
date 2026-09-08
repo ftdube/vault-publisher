@@ -42,7 +42,7 @@ WORKDIR /usr/src/app
 COPY --from=builder --chown=node:node /usr/src/app/node_modules ./node_modules
 COPY --chown=node:node package.json quartz.config.yaml ./
 COPY --from=builder --chown=node:node /usr/src/app/dist ./dist
-# node:22-slim ships a non-root `node` user (uid/gid 1000) — issue #8: the daemon
+# The node:*-slim images ship a non-root `node` user (uid/gid 1000) — issue #8: the daemon
 # has SSH-adjacent hostPath access and runs third-party quartz plugins at build
 # time, so it must not run as root.
 USER node
