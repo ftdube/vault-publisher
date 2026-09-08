@@ -44,13 +44,21 @@ jobs:
 
       - name: CI Node agrees with the Dockerfile
         run: |
-          want=$(grep -oE '^FROM node:[0-9]+' Dockerfile | head -1 | cut -d: -f2)
-          have=$(node -p 'process.versions.node.split(".")[0]')
-          if [ "$want" != "$have" ]; then
-            echo "::error::Dockerfile builds on node $want but CI is testing on $have"
+          want=$(grep -oE '^FROM node:[0-9]+' Dockerfile | cut -d: -f2 | sort -u)
+          if [ -z "$want" ]; then
+            echo "::error::could not parse any 'FROM node:<major>' line from Dockerfile"
             exit 1
           fi
-          echo "node $have matches the Dockerfile"
+          if [ "$(printf '%s\n' "$want" | wc -l | tr -d ' ')" -ne 1 ]; then
+            echo "::error::Dockerfile stages disagree on the Node: $(printf '%s ' $want)"
+            exit 1
+          fi
+          have=$(node -p 'process.versions.node.split(".")[0]')
+          if [ "$want" != "$have" ]; then
+            echo "::error::Dockerfile builds on Node $want but CI is testing on $have"
+            exit 1
+          fi
+          echo "Node $have matches the Dockerfile"
 
       - run: npm ci
       - run: npm run typecheck
