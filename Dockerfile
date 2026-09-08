@@ -1,7 +1,7 @@
 # Trims package.json to only the fields npm ci / dependency resolution care
 # about, so edits to description/scripts/etc. don't bust the npm ci and
 # plugin pre-bake layers below — pre-bake alone costs ~3.5min when it reruns.
-FROM node:22-slim AS deps-manifest
+FROM node:26-slim AS deps-manifest
 WORKDIR /usr/src/app
 COPY package.json ./
 RUN node -e " \
@@ -11,7 +11,7 @@ RUN node -e " \
   fs.writeFileSync('package.json', JSON.stringify({ name, version, private: priv, type, engines, dependencies, devDependencies, overrides }, null, 2)); \
   "
 
-FROM node:22-slim AS builder
+FROM node:26-slim AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/src/app
@@ -35,14 +35,14 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build && npm prune --omit=dev
 
-FROM node:22-slim
+FROM node:26-slim
 RUN apt-get update && apt-get install -y --no-install-recommends gettext-base \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/src/app
 COPY --from=builder --chown=node:node /usr/src/app/node_modules ./node_modules
 COPY --chown=node:node package.json quartz.config.yaml ./
 COPY --from=builder --chown=node:node /usr/src/app/dist ./dist
-# node:22-slim ships a non-root `node` user (uid/gid 1000) — issue #8: the daemon
+# The node:*-slim images ship a non-root `node` user (uid/gid 1000) — issue #8: the daemon
 # has SSH-adjacent hostPath access and runs third-party quartz plugins at build
 # time, so it must not run as root.
 USER node
