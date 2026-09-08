@@ -22,7 +22,7 @@ if [ ! -f "$dockerfile" ]; then
   exit 1
 fi
 
-want=$(grep -oE '^[[:space:]]*FROM[[:space:]]+node:[0-9]+' "$dockerfile" | sed 's/.*://' | sort -u || true)
+want=$(grep -oE '^[[:space:]]*FROM[[:space:]]+(--[^[:space:]]+[[:space:]]+)*([^[:space:]]+/)?node:[0-9]+' "$dockerfile" | sed 's/.*://' | sort -u || true)
 
 if [ -z "$want" ]; then
   echo "::error::could not parse any 'FROM node:<major>' line from $dockerfile"
