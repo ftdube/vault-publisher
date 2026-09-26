@@ -51,9 +51,9 @@ A three-container Kubernetes Pod, tied to one node via `nodeSelector` (both volu
    ```
    kubectl create secret generic vault-publisher-repo --from-literal=VAULT_REPO_URL=<your-vault-git-url>
    kubectl create secret generic vault-publisher-ssh-key --from-file=id_ed25519=<path-to-deploy-key> \
-     --from-file=known_hosts=<(ssh-keyscan <git-host>)
+     --from-file=known_hosts=<(ssh-keyscan "$GIT_HOST")
    ```
-   Check the scanned host key against your git host's published fingerprint — host-key verification stays on, so this file is what git-sync trusts.
+   Set `GIT_HOST` to your git server's hostname first. Check the scanned host key against your git host's published fingerprint — host-key verification stays on, so this file is what git-sync trusts.
    Skip the SSH key secret (and drop the `GITSYNC_SSH*` env vars and the `ssh-key` volume from `deployment.yaml`) if the repo is HTTPS-public.
 3. **Copy `deploy/k8s/`** into your own config and fill in the placeholders:
    - `configmap.yaml`: `QUARTZ_BASE_URL` (required — no protocol, no trailing slash), and any of `VAULT_BRANCH`/`VAULT_SYNC_PERIOD`/`POLL_INTERVAL`/`QUARTZ_PAGE_TITLE` you want to override
