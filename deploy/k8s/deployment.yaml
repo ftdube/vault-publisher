@@ -30,6 +30,10 @@ spec:
       # hostPath binds this Pod to one node's local disk — REPLACE with the target node.
       nodeSelector:
         kubernetes.io/hostname: REPLACE_WITH_NODE_NAME
+      # Secret files are root-owned; fsGroup makes the SSH key/known_hosts group-
+      # readable by uid 1000 (see agents.md gotchas). No effect on hostPath.
+      securityContext:
+        fsGroup: 1000
       # chowns both hostPath volumes to the non-root UID below — see agents.md
       # gotchas for why (fsGroup doesn't apply to hostPath).
       initContainers:
