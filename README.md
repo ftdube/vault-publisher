@@ -54,7 +54,7 @@ A three-container Kubernetes Pod, tied to one node via `nodeSelector` (both volu
      --from-file=known_hosts=<(ssh-keyscan <git-host>)
    ```
    Check the scanned host key against your git host's published fingerprint — host-key verification stays on, so this file is what git-sync trusts.
-   Skip the SSH key secret (and drop `GITSYNC_SSH`/the `ssh-key` volume from `deployment.yaml`) if the repo is HTTPS-public.
+   Skip the SSH key secret (and drop the `GITSYNC_SSH*` env vars and the `ssh-key` volume from `deployment.yaml`) if the repo is HTTPS-public.
 3. **Copy `deploy/k8s/`** into your own config and fill in the placeholders:
    - `configmap.yaml`: `QUARTZ_BASE_URL` (required — no protocol, no trailing slash), and any of `VAULT_BRANCH`/`VAULT_SYNC_PERIOD`/`POLL_INTERVAL`/`QUARTZ_PAGE_TITLE` you want to override
    - `deployment.yaml`: `nodeSelector`'s `REPLACE_WITH_NODE_NAME`, the `builder` image (`ghcr.io/OWNER/vault-publisher:latest`), and the two hostPath `path`s if you're not using the defaults
