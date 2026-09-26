@@ -68,12 +68,12 @@ A three-container Kubernetes Pod, tied to one node via `nodeSelector` (both volu
 ### Updating
 
 - **New image version**: bump the `builder` image tag in `deployment.yaml` and re-apply. `strategy: Recreate` means a brief full-Pod restart (hostPath can't be shared by two Pods at once) — the previous `/site/current` build keeps being served by Caddy right up until the old Pod terminates.
-- **Config-only change** (e.g. `QUARTZ_PAGE_TITLE`): re-apply the ConfigMap, then delete `.build-info` from the `/site` hostPath directory before restarting the Pod. A restart alone is **not** enough — the last-built vault ref persists in `/site/current/.build-info` (G3, so a restart doesn't force a needless rebuild), so if the vault hasn't also changed, the builder just logs "Up to date" and the old config keeps being served. Automatic pickup on every restart is tracked as FR-BUILD-5 (currently Planned).
+- **Config-only change** (e.g. `QUARTZ_PAGE_TITLE`): re-apply the ConfigMap, then delete `current/.build-info` from the `/site` hostPath directory (e.g. `/mnt/vault-publisher/site/current/.build-info` — note the `current` subdirectory, not `/site` itself) before restarting the Pod. A restart alone is **not** enough — the last-built vault ref persists in `.build-info` (G3, so a restart doesn't force a needless rebuild), so if the vault hasn't also changed, the builder just logs "Up to date" and the old config keeps being served. Automatic pickup on every restart is tracked as FR-BUILD-5 (currently Planned).
 
 ### Troubleshooting
 
 - **Caddy 404 right after first deploy**: expected until the first build completes (RISK-2); the readiness probe should flip once it does.
-- **git-sync never syncs / SSH errors**: check the `git-sync` container's logs and that the SSH key Secret is exactly the private key file contents (`kubectl create secret generic ... --from-file=id_ed25519=<key>`, not `--from-literal`).
+- **git-sync never syncs / SSH errors**: check the `git-sync` container's logs and that the SSH key Secret is exactly the private key file contents (`kubectl create secret generic ... --from-file=id_ed25519=<key>`, not `--from-literal`). The example manifest sets `GITSYNC_SSH_KNOWN_HOSTS=false` (no known_hosts file is mounted) — if you've switched to strict host-key checking, a stale or missing known_hosts entry for your git host will also show up as a sync failure here.
 - **Local testing without a cluster**: `docker-compose.verify.yml` runs the same three-container chain against a throwaway sample vault (`./deploy/verify/make-sample-vault.sh` first) — useful for validating a Caddyfile or config change before touching the real cluster.
 
 ## Environment variables
@@ -84,15 +84,15 @@ Vault-access variables go on the `git-sync` container; site/build variables go o
 |---|---|---|---|---|
 | `VAULT_REPO_URL` | git-sync | yes | — | Git remote URL of the vault (SSH or HTTPS) |
 | `VAULT_BRANCH` | git-sync | no | `main` | Branch to track |
-| `VAULT_SYNC_PERIOD` | git-sync | no | `300` | Seconds between sync (clone/pull) cycles |
-| `SSH_KEY_PATH` | git-sync | no | `/ssh/id_ed25519` | Path to SSH deploy key (for private repos), mounted `0400` |
-| `POLL_INTERVAL` | builder | no | `300` | Seconds between the builder's checks of `/vault/current` |
+| `VAULT_SYNC_PERIOD` | git-sync | no | `300s` | Duration between sync (clone/pull) cycles — git-sync parses this as a Go duration, so it needs a unit (`300s`, `5m`); a bare number fails |
+| `SSH_KEY_PATH` | git-sync | no | `/ssh/id_ed25519` | Path to SSH deploy key (for private repos), mounted `0400`. Kept in `configmap.yaml` in sync with `deployment.yaml`'s `ssh-key` volumeMount/item — moving one without the other breaks auth |
+| `POLL_INTERVAL` | builder | no | `300` | Plain seconds (not a duration string) between the builder's checks of `/vault/current` |
 | `QUARTZ_BASE_URL` | builder | yes | — | Base URL served by Caddy (no protocol, no trailing slash) |
 | `QUARTZ_PAGE_TITLE` | builder | no | `My Vault` | Site title |
 
 ## quartz configuration
 
-vault-publisher depends on [`@jackyzha0/quartz`](https://github.com/jackyzha0/quartz) as a git-ref-pinned dependency (it isn't published to the npm registry) — never forked or patched. The included `quartz.config.yaml` is a general-purpose default; override `pageTitle`/`baseUrl` at deploy time via environment variables (substituted by the daemon before each build). For full control, mount a custom `quartz.config.yaml` via a ConfigMap.
+vault-publisher depends on [`@jackyzha0/quartz`](https://github.com/jackyzha0/quartz) as a git-ref-pinned dependency (it isn't published to the npm registry) — never forked or patched. The included `quartz.config.yaml` is a general-purpose default; override `pageTitle`/`baseUrl` at deploy time via environment variables (substituted by the daemon before each build). For full control, mount a custom `quartz.config.yaml` over `/usr/src/app/quartz.config.yaml` on the `builder` container (e.g. a ConfigMap volume) — the daemon reads it from the app root before every build, so no code change is needed; `${QUARTZ_PAGE_TITLE}`/`${QUARTZ_BASE_URL}` placeholders still get substituted if present.
 
 Unpatched quartz has no PWA/manifest support, so there's no app short-name or install-to-homescreen option.
 

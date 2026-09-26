@@ -77,10 +77,19 @@ spec:
             - name: GITSYNC_SSH
               value: "true"
             - name: GITSYNC_SSH_KEY_FILE
-              value: /ssh/id_ed25519
+              valueFrom:
+                configMapKeyRef:
+                  name: vault-publisher-config
+                  key: SSH_KEY_PATH
             # required for SSH under a non-default UID — see agents.md gotchas
             - name: GITSYNC_ADD_USER
               value: "true"
+            # No known_hosts is mounted in this example, and git-sync defaults to
+            # strict host-key checking — without this, the first SSH connection fails.
+            # For stricter verification, mount a known_hosts file instead, set
+            # GITSYNC_SSH_KNOWN_HOSTS_FILE to it, and drop this line.
+            - name: GITSYNC_SSH_KNOWN_HOSTS
+              value: "false"
           volumeMounts:
             - name: vault
               mountPath: /vault
@@ -97,6 +106,16 @@ spec:
           envFrom:
             - configMapRef:
                 name: vault-publisher-config
+          # RISK-5: bounds a runaway quartz build so it can't starve other workloads
+          # on the node. NFR-BUILD-1/NFR-POLL-1's <500MB peak / <100MB idle targets
+          # are unverified on real hardware (Phase 3, next-steps.md) — tune the limit
+          # once measured against your own vault size.
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
           volumeMounts:
             - name: vault
               mountPath: /vault
