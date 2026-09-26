@@ -50,8 +50,10 @@ A three-container Kubernetes Pod, tied to one node via `nodeSelector` (both volu
 2. **Create the secrets** git-sync needs (never commit these — see `deploy/k8s/secret.example.yaml`'s header):
    ```
    kubectl create secret generic vault-publisher-repo --from-literal=VAULT_REPO_URL=<your-vault-git-url>
-   kubectl create secret generic vault-publisher-ssh-key --from-file=id_ed25519=<path-to-deploy-key>
+   kubectl create secret generic vault-publisher-ssh-key --from-file=id_ed25519=<path-to-deploy-key> \
+     --from-file=known_hosts=<(ssh-keyscan <git-host>)
    ```
+   Check the scanned host key against your git host's published fingerprint — host-key verification stays on, so this file is what git-sync trusts.
    Skip the SSH key secret (and drop `GITSYNC_SSH`/the `ssh-key` volume from `deployment.yaml`) if the repo is HTTPS-public.
 3. **Copy `deploy/k8s/`** into your own config and fill in the placeholders:
    - `configmap.yaml`: `QUARTZ_BASE_URL` (required — no protocol, no trailing slash), and any of `VAULT_BRANCH`/`VAULT_SYNC_PERIOD`/`POLL_INTERVAL`/`QUARTZ_PAGE_TITLE` you want to override
@@ -73,7 +75,7 @@ A three-container Kubernetes Pod, tied to one node via `nodeSelector` (both volu
 ### Troubleshooting
 
 - **Caddy 404 right after first deploy**: expected until the first build completes (RISK-2); the readiness probe should flip once it does.
-- **git-sync never syncs / SSH errors**: check the `git-sync` container's logs and that the SSH key Secret is exactly the private key file contents (`kubectl create secret generic ... --from-file=id_ed25519=<key>`, not `--from-literal`). The example manifest sets `GITSYNC_SSH_KNOWN_HOSTS=false` (no known_hosts file is mounted) — if you've switched to strict host-key checking, a stale or missing known_hosts entry for your git host will also show up as a sync failure here.
+- **git-sync never syncs / SSH errors**: check the `git-sync` container's logs and that the SSH key Secret is exactly the private key file contents (`kubectl create secret generic ... --from-file=id_ed25519=<key>`, not `--from-literal`). A `Host key verification failed` error means the Secret's `known_hosts` is missing or doesn't match your git host — re-run `ssh-keyscan` and recreate the Secret.
 - **Local testing without a cluster**: `docker-compose.verify.yml` runs the same three-container chain against a throwaway sample vault (`./deploy/verify/make-sample-vault.sh` first) — useful for validating a Caddyfile or config change before touching the real cluster.
 
 ## Environment variables
