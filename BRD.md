@@ -110,7 +110,7 @@ The replacement design addresses all three: quartz as a versioned npm dependency
 | Daemon | The long-running container process that detects vault checkout changes and triggers builds |
 | git-sync | Sidecar container that owns cloning/pulling the vault repo into `/vault`; the daemon has no git access |
 | Poll interval (`POLL_INTERVAL`) | Seconds between the daemon's checks of `/vault/current`; a build only fires when it has changed since the last build |
-| Sync period (`VAULT_SYNC_PERIOD`) | Seconds between git-sync's own fetch/pull cycles — independent of `POLL_INTERVAL` |
+| Sync period (`VAULT_SYNC_PERIOD`) | Interval between git-sync's own fetch/pull cycles, as a Go duration with a unit (e.g. `300s`) — independent of `POLL_INTERVAL`, which is plain seconds |
 | `/vault` | hostPath directory git-sync writes the vault checkout into (rw for git-sync, ro for the daemon) |
 | `/vault/current` | Symlink git-sync maintains, always pointing at the latest successfully synced worktree |
 | `/site` | hostPath mount point; contains `current`/`next`/`old` subdirectories (the mount point itself can't be renamed — RISK-6/issue #4) |
@@ -185,7 +185,7 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
 | FR-SYNC-1 | On startup, git-sync SHALL clone `VAULT_REPO_URL` into `/vault` (its `--root`) if not already present; otherwise it SHALL pull. It SHALL maintain a `current` symlink (`--link=current`) inside `/vault` that always points at the latest successfully synced worktree. | Must | Implemented (`deploy/k8s/deployment.yaml`; behavior itself confirmed via `docker-compose.verify.yml`, not the manifest directly — no live cluster available) |
-| FR-SYNC-2 | git-sync SHALL sync on `VAULT_SYNC_PERIOD` seconds (`--period`). | Must | Implemented (as above) |
+| FR-SYNC-2 | git-sync SHALL sync every `VAULT_SYNC_PERIOD` (`--period`), which SHALL be a Go duration with a unit (e.g. `300s`); a bare number fails to parse. | Must | Implemented (as above) |
 | FR-SYNC-3 | SSH key at `SSH_KEY_PATH` SHALL be used for git operations when present (`--ssh`, `--ssh-key-file`); HTTPS is used otherwise. | Must | Implemented (manifest only — SSH auth itself still unverified, see `next-steps.md`'s Verify item) |
 | FR-SYNC-4 | A sync failure SHALL be logged and retried on git-sync's own backoff; it SHALL NOT stop the `current` symlink from pointing at the last good sync, and SHALL NOT crash the sidecar. | Must | Planned (upstream git-sync behavior, not something this repo configures or has verified) |
 | FR-SYNC-5 | `/vault` SHALL be mounted read-write by the git-sync container and read-only by the daemon container. | Must | Implemented (`deploy/k8s/deployment.yaml`) |
