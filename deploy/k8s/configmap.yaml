@@ -5,8 +5,15 @@ metadata:
   name: vault-publisher-config
 data:
   VAULT_BRANCH: "main"
-  VAULT_SYNC_PERIOD: "300"
+  # git-sync parses this as a Go duration (needs a unit) — bare "300" fails to parse.
+  # POLL_INTERVAL below is plain seconds, parsed by the daemon itself — the two are
+  # NOT interchangeable formats despite both being "seconds between X" in README.md.
+  VAULT_SYNC_PERIOD: "300s"
   POLL_INTERVAL: "300"
   QUARTZ_PAGE_TITLE: "My Vault"
   # No protocol, no trailing slash (README.md). Replace before applying.
   QUARTZ_BASE_URL: "vault.example.com"
+  # Effective path of the mounted SSH key — kept in sync with deployment.yaml's
+  # ssh-key volumeMount (mountPath: /ssh) + secret item (id_ed25519). Changing this
+  # alone without also moving the volumeMount/item will break git-sync's SSH auth.
+  SSH_KEY_PATH: "/ssh/id_ed25519"

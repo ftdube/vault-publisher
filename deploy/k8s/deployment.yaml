@@ -30,6 +30,10 @@ spec:
       # hostPath binds this Pod to one node's local disk — REPLACE with the target node.
       nodeSelector:
         kubernetes.io/hostname: REPLACE_WITH_NODE_NAME
+      # Secret files are root-owned; fsGroup makes the SSH key/known_hosts group-
+      # readable by uid 1000 (see agents.md gotchas). No effect on hostPath.
+      securityContext:
+        fsGroup: 1000
       # chowns both hostPath volumes to the non-root UID below — see agents.md
       # gotchas for why (fsGroup doesn't apply to hostPath).
       initContainers:
@@ -77,10 +81,17 @@ spec:
             - name: GITSYNC_SSH
               value: "true"
             - name: GITSYNC_SSH_KEY_FILE
-              value: /ssh/id_ed25519
+              valueFrom:
+                configMapKeyRef:
+                  name: vault-publisher-config
+                  key: SSH_KEY_PATH
             # required for SSH under a non-default UID — see agents.md gotchas
             - name: GITSYNC_ADD_USER
               value: "true"
+            # Host-key verification stays on (git-sync's default); a missing or stale
+            # known_hosts fails the sync instead of trusting an unverified remote.
+            - name: GITSYNC_SSH_KNOWN_HOSTS_FILE
+              value: /ssh/known_hosts
           volumeMounts:
             - name: vault
               mountPath: /vault
@@ -94,9 +105,35 @@ spec:
             runAsGroup: 1000
             runAsNonRoot: true
             allowPrivilegeEscalation: false
-          envFrom:
-            - configMapRef:
-                name: vault-publisher-config
+          # Explicit keys, not envFrom: vault-access settings in the shared ConfigMap
+          # must not reach the builder (FR-CFG-1, NFR-SEC-5).
+          env:
+            - name: QUARTZ_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: vault-publisher-config
+                  key: QUARTZ_BASE_URL
+            - name: QUARTZ_PAGE_TITLE
+              valueFrom:
+                configMapKeyRef:
+                  name: vault-publisher-config
+                  key: QUARTZ_PAGE_TITLE
+            - name: POLL_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: vault-publisher-config
+                  key: POLL_INTERVAL
+          # RISK-5: the memory limit caps a runaway build. CPU is deliberately
+          # request-only — a limit would throttle builds on a slow node, and the
+          # request already guarantees other pods their share under contention.
+          # NFR-BUILD-1/NFR-POLL-1's targets are unmeasured (Phase 3, next-steps.md);
+          # tune once measured against your own vault size.
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
           volumeMounts:
             - name: vault
               mountPath: /vault
@@ -141,6 +178,8 @@ spec:
             items:
               - key: id_ed25519
                 path: id_ed25519
+              - key: known_hosts
+                path: known_hosts
         - name: caddyfile
           configMap:
             name: vault-publisher-caddyfile
