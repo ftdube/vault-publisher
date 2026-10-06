@@ -22,12 +22,19 @@ COPY quartz.config.yaml ./
 RUN cp quartz.config.yaml node_modules/@jackyzha0/quartz/quartz.config.yaml
 
 # Pre-bake community plugins (.quartz/plugins) with a throwaway build so the
-# pod never has to fetch or build them at startup (NFR-BUILD-3).
+# pod never has to fetch or build them at startup (NFR-BUILD-3). Quartz prunes
+# each plugin's devDependencies itself but skips that when the tsup DTS step
+# fails (see agent-archive.md), leaving vite/vitest CVEs in the image (issue #9).
+# Prune only those (tsup still present): pruning the rest would delete peer
+# symlinks Quartz created after its own prune (e.g. latex -> rehype-typst).
 RUN mkdir -p /tmp/seed-content \
     && echo "# seed" > /tmp/seed-content/index.md \
     && cd node_modules/@jackyzha0/quartz \
     && node ./quartz/bootstrap-cli.mjs build -d /tmp/seed-content --output /tmp/seed-output \
-    && rm -rf /tmp/seed-content /tmp/seed-output
+    && rm -rf /tmp/seed-content /tmp/seed-output \
+    && for p in .quartz/plugins/*/; do \
+         if [ -d "${p}node_modules/tsup" ]; then (cd "$p" && npm prune --omit=dev) || exit 1; fi; \
+       done
 
 # Real package.json (scripts, description, ...) only needed from here on.
 COPY package.json ./
@@ -36,8 +43,11 @@ COPY src/ ./src/
 RUN npm run build && npm prune --omit=dev
 
 FROM node:26-slim
+# Nothing runs npm at runtime (plugins are pre-baked); the base image's bundled
+# copy only adds CVEs to the trivy scan (issue #9).
 RUN apt-get update && apt-get install -y --no-install-recommends gettext-base \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /usr/src/app
 COPY --from=builder --chown=node:node /usr/src/app/node_modules ./node_modules
 COPY --chown=node:node package.json quartz.config.yaml ./
