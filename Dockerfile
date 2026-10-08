@@ -24,7 +24,7 @@ RUN cp quartz.config.yaml node_modules/@jackyzha0/quartz/quartz.config.yaml
 # Pre-bake community plugins (.quartz/plugins) with a throwaway build so the
 # pod never has to fetch or build them at startup (NFR-BUILD-3). Quartz prunes
 # each plugin's devDependencies itself but skips that when the tsup DTS step
-# fails (see agent-archive.md), leaving vite/vitest CVEs in the image (issue #9).
+# fails (see decisions.md), leaving vite/vitest CVEs in the image (issue #9).
 # Prune only those (tsup still present): pruning the rest would delete peer
 # symlinks Quartz created after its own prune (e.g. latex -> rehype-typst).
 RUN mkdir -p /tmp/seed-content \

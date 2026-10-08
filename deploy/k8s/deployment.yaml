@@ -31,10 +31,10 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: REPLACE_WITH_NODE_NAME
       # Secret files are root-owned; fsGroup makes the SSH key/known_hosts group-
-      # readable by uid 1000 (see agents.md gotchas). No effect on hostPath.
+      # readable by uid 1000 (see AGENTS.md gotchas). No effect on hostPath.
       securityContext:
         fsGroup: 1000
-      # chowns both hostPath volumes to the non-root UID below — see agents.md
+      # chowns both hostPath volumes to the non-root UID below — see AGENTS.md
       # gotchas for why (fsGroup doesn't apply to hostPath).
       initContainers:
         - name: init-permissions
@@ -85,7 +85,7 @@ spec:
                 configMapKeyRef:
                   name: vault-publisher-config
                   key: SSH_KEY_PATH
-            # required for SSH under a non-default UID — see agents.md gotchas
+            # required for SSH under a non-default UID — see AGENTS.md gotchas
             - name: GITSYNC_ADD_USER
               value: "true"
             # Host-key verification stays on (git-sync's default); a missing or stale

@@ -42,7 +42,7 @@ A three-container Kubernetes Pod, tied to one node via `nodeSelector` (both volu
 | Path | Purpose |
 |---|---|
 | `/vault` | git checkout of the vault repo, maintained by git-sync (rw for git-sync, ro for `builder`; persists across restarts) |
-| `/site` | hostPath mount; `current`/`next`/`old` live as subdirectories inside it (the mount point itself can't be renamed — see `agents.md`). Caddy serves `/site/current`, which persists across restarts |
+| `/site` | hostPath mount; `current`/`next`/`old` live as subdirectories inside it (the mount point itself can't be renamed — see [`decisions.md`](decisions.md#site-itself-is-never-renamed-risk-6-issue-4)). Caddy serves `/site/current`, which persists across restarts |
 
 ### Configure and deploy
 
