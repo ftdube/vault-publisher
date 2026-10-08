@@ -5,12 +5,12 @@
 | Field | Value |
 |---|---|
 | Document title | Business Requirements Document — vault-publisher |
-| Document version | 0.7 (Draft) |
+| Document version | 0.8 (Draft) |
 | System version documented | Daemon, git-sync sidecar, and Caddy serving verified end-to-end (`next-steps.md` Verify items, issue #4). K8s manifests for the three-container Pod exist in `deploy/k8s/` and are structurally validated (`kubectl kustomize`), but not yet applied to a live cluster. A documentation/implementation gap audit (v0.7) found and fixed several manifest-level issues (SSH host-key checking, a `VAULT_SYNC_PERIOD` duration-format bug, missing resource limits) that a live-cluster apply had not yet exercised. |
-| Date | 2026-08-25 |
+| Date | 2026-10-07 |
 | Author | Claude Code, on behalf of the repository owner |
 | Classification | Public |
-| Related artifacts | [`agents.md`](agents.md), [`RISKS.md`](RISKS.md), [`README.md`](README.md), [`next-steps.md`](next-steps.md), [`deploy/k8s/`](deploy/k8s/) |
+| Related artifacts | [`AGENTS.md`](AGENTS.md), [`REBUILD.md`](REBUILD.md), [`decisions.md`](decisions.md), [`RISKS.md`](RISKS.md), [`README.md`](README.md), [`next-steps.md`](next-steps.md), [`deploy/k8s/`](deploy/k8s/) |
 
 ### Revision History
 
@@ -23,6 +23,7 @@
 | 0.5 | 2026-08-25 | Verify step executed: real image build, real `git-sync:v4.2.4` sidecar, real (throwaway) sample vault. Found and fixed a launch-blocking bug (issue #4, RISK-6): `/site` is the hostPath mount point itself, and `rename(2)` refuses to rename a mount point (`EBUSY`) even when empty — every promotion was failing, so the site never published at all. Fixed by moving `current`/`next`/`old` to be sibling subdirectories under `/site` instead of top-level mount paths (FR-BUILD-1/2 updated accordingly); Caddy's document root is now `/site/current`, not `/site`. Re-verified after the fix: build succeeds, a second vault commit triggers a rebuild, output is correctly published. Also confirmed RISK-10 (git-sync worktree dirs are named deterministically by commit SHA) and that `/vault/current` tracks the configured branch. |
 | 0.6 | 2026-08-25 | Caddy integration verified end-to-end (previously untested — the v0.5 Verify pass covered git-sync/build/promote but not serving): a real Caddy container against the same throwaway sample vault served the build correctly and stayed at 200 across a rebuild/promotion cycle under continuous request load (`next-steps.md`). K8s manifests for the three-container Pod written (`deploy/k8s/`) — FR-SYNC-1..5, NFR-SEC-1 move to Implemented (manifest declares the behavior; git-sync's own runtime behavior beyond §9.2/RISK-10's scope, and the manifest's correctness against a live cluster, remain unverified — no cluster was available). NFR-OBS-2's annotations added to the Deployment template ahead of Phase 2 (inert until `:9090/metrics` exists). |
 | 0.7 | 2026-08-25 | Documentation/implementation gap audit against `deploy/k8s/` and `src/`, all still unverified against a live cluster: (1) `configmap.yaml`'s `VAULT_SYNC_PERIOD` default changed from a bare `"300"` to `"300s"` — git-sync parses `GITSYNC_PERIOD` as a Go duration, which requires a unit; a bare integer would have failed to parse on first apply, uncaught by the Docker-based Verify pass because it hardcodes `--period=10s` directly instead of going through this env var. (2) No known_hosts was mounted, and git-sync defaults to strict host-key checking — the specific reason the already-unverified SSH path would have failed. Fixed by shipping `known_hosts` in the SSH Secret (`GITSYNC_SSH_KNOWN_HOSTS_FILE`), keeping verification on rather than disabling it. (3) `SSH_KEY_PATH` moved from a hardcoded literal in `deployment.yaml` to a `configmap.yaml` key; the builder now takes explicit ConfigMap keys instead of `envFrom`, so git-sync's vault-access keys no longer leak into it (FR-CFG-1, NFR-SEC-5). (4) Added a memory limit and memory/CPU requests to the `builder` container — RISK-5's mitigation was documented but absent from the manifest; CPU is request-only by design. (5) FR-CFG-3 corrected from Planned to Implemented (the code already supports a mounted config override; only the manifest example and docs were missing). (6) §8's `:9090/metrics` narrative corrected to read as not-yet-implemented, matching NFR-OBS-1's status. (7) `README.md`'s `.build-info` troubleshooting path corrected to `current/.build-info`. |
+| 0.8 | 2026-10-07 | `agents.md` renamed `AGENTS.md` (its `claude.md`/`gemini.md` symlinks removed); `agent-archive.md` folded into new `decisions.md`; `REBUILD.md` added. No requirement changed. |
 
 ### Approval
 
@@ -232,7 +233,7 @@ Owned by the `git-sync` sidecar (`registry.k8s.io/git-sync/git-sync`), not the d
 | Vault git clone | `/vault` (hostPath) | Persists across pod restarts; written only by git-sync (rw); daemon mounts read-only and reads `/vault/current` |
 | Built static site | `/site/current` (subdirectory of the `/site` hostPath mount) | Persists across pod restarts; always a complete, consistent snapshot |
 | Build staging | `/site/next` | Ephemeral; created per build, renamed to `/site/current` on success, deleted on failure |
-| quartz config | `node_modules/@jackyzha0/quartz/quartz.config.yaml` | Must live inside the installed quartz package — quartz resolves config relative to `process.cwd()`, not its install path (see `agents.md`). Default baked into image; overridable via ConfigMap mount |
+| quartz config | `node_modules/@jackyzha0/quartz/quartz.config.yaml` | Must live inside the installed quartz package — quartz resolves config relative to `process.cwd()`, not its install path (see `decisions.md`). Default baked into image; overridable via ConfigMap mount |
 | SSH deploy key | `SSH_KEY_PATH` (K8s Secret mount) | Must be `0400`; mounted into the git-sync container only, read at its startup — the daemon container never has this key |
 
 ## 11. Interface Requirements
@@ -279,7 +280,9 @@ Prometheus metrics are specified (NFR-OBS-1, NFR-OBS-2; Status: Planned, Phase 2
 
 ### Appendix A — Related Documents
 
-- [`agents.md`](agents.md) — hard rules and non-obvious operational gotchas
+- [`AGENTS.md`](AGENTS.md) — hard rules and non-obvious operational gotchas
+- [`decisions.md`](decisions.md) — rationale behind them
+- [`REBUILD.md`](REBUILD.md) — workstation to published site
 - [`RISKS.md`](RISKS.md) — risk register
 - [`next-steps.md`](next-steps.md) — deferred work and phase roadmap
 - [`README.md`](README.md) — user-facing setup guide

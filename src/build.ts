@@ -9,7 +9,7 @@ const CONFIG_TEMPLATE = path.join(APP_ROOT, "quartz.config.yaml")
 const CONFIG_DEST = path.join(QUARTZ_PKG_DIR, "quartz.config.yaml")
 
 // /site is a mount point; rename(2) can't rename it (EBUSY). current/next/old live as
-// subdirectories instead — never rename /site itself. See agent-archive.md.
+// subdirectories instead — never rename /site itself. See decisions.md.
 const SITE_MOUNT = "/site"
 const SITE_DIR = path.join(SITE_MOUNT, "current")
 const SITE_NEXT_DIR = path.join(SITE_MOUNT, "next")
@@ -42,7 +42,7 @@ function runPiped(
 }
 
 // FR-BUILD-4: substitute ${QUARTZ_*} placeholders via envsubst, writing into the
-// installed quartz package's own directory (see agents.md — quartz resolves
+// installed quartz package's own directory (see decisions.md — quartz resolves
 // quartz.config.yaml relative to process.cwd(), not its install path).
 export async function substituteConfig(): Promise<void> {
   const pageTitle = process.env.QUARTZ_PAGE_TITLE || "My Vault"

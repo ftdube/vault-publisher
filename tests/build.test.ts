@@ -5,7 +5,7 @@ import path from "node:path"
 import { substituteConfig } from "../src/build.js"
 
 // Real target: quartz resolves its config relative to process.cwd(), inside its own
-// installed package directory (see agents.md) — this is exactly where substituteConfig writes.
+// installed package directory (see decisions.md) — this is exactly where substituteConfig writes.
 const CONFIG_DEST = path.join(process.cwd(), "node_modules/@jackyzha0/quartz/quartz.config.yaml")
 
 // FR-BUILD-4: env var placeholders in quartz.config.yaml SHALL be substituted via envsubst.

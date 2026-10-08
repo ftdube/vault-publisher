@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Creates a throwaway bare git repo with placeholder content, for local end-to-end
 # verification of the git-sync -> builder -> Caddy chain (docker-compose.verify.yml).
-# Never contains real vault content — see agents.md's "never bake vault content" rule.
+# Never contains real vault content — see AGENTS.md's "never bake vault content" rule.
 set -euo pipefail
 cd "$(dirname "$0")"
 
