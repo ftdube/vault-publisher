@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=./quartz/plugins/quartz-plugins.schema.json
+# Throwaway acceptance test for n8n copilot-pr-review (do not merge).
 configuration:
   pageTitle: ${QUARTZ_PAGE_TITLE}
   pageTitleSuffix: ""
