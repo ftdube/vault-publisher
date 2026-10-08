@@ -18,7 +18,7 @@
     "@jackyzha0/quartz": "github:jackyzha0/quartz#v5"
   },
   "overrides": {
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
