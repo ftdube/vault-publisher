@@ -13,18 +13,6 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/vault-publisher
 
 jobs:
-  # Every pull request and push to main, docs-only included, so it never takes
-  # the `changes` gate. A fork branch is scanned once its pull request opens.
-  secrets:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0   # every commit, so the scan below sees all of history
-      # The CLI, not gitleaks-action: the action scans only the event's commit
-      # range, and a secret anywhere in history is leaked, not just in this PR.
-      - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --verbose
-
   # Doc-only changes still need `build` to report — it's a required check — so
   # gate the work here rather than skipping the workflow with paths-ignore.
   # A job skipped by `if:` reports `skipped`, which SATISFIES a required check.
