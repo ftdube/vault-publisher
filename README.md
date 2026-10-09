@@ -98,6 +98,10 @@ vault-publisher depends on [`@jackyzha0/quartz`](https://github.com/jackyzha0/qu
 
 Unpatched quartz has no PWA/manifest support, so there's no app short-name or install-to-homescreen option.
 
+## Contributing
+
+Branch, secrets and documentation conventions: [`AGENTS.md`](AGENTS.md#contributing).
+
 ## License
 
 MIT

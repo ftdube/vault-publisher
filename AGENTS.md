@@ -23,3 +23,15 @@ Daemon that builds an Obsidian vault as a static site with Quartz whenever a `gi
 - `POLL_INTERVAL` (plain seconds) paces the daemon's symlink check; `VAULT_SYNC_PERIOD` (a Go duration, e.g. `300s` — bare numbers fail) paces git-sync's own fetch — a build only fires when the symlink target changes
 - issue #8 (non-root containers): `fsGroup` doesn't apply to `hostPath`, so a root `initContainer` chowns both volumes; git-sync needs `GITSYNC_ADD_USER=true` for SSH under its non-root UID, mounts the deploy key `0400` (`0644` is rejected by SSH); Secret files are root-owned, so the pod's `fsGroup: 1000` is what lets git-sync read them; keep host-key checking on — `known_hosts` ships in the same Secret, never `GITSYNC_SSH_KNOWN_HOSTS=false`
 - `build` is a required status check on `main`; CI must never skip the whole workflow (`paths-ignore`) or docs-only PRs deadlock waiting for `build` — instead a `changes` job gates the real work and `build` always reports
+
+## Contributing
+
+What an outside contributor must follow that CI does not enforce:
+
+- Branch from `main` as `feature/<name>`, `fix/<name>` or `docs/<name>`, then open a pull request.
+- Never commit secrets. CI's `secrets` job scans all of history, but by then a pushed secret is already public: rotate it, since rewriting history does not take it back.
+- No personal identifiers (domains, hostnames, usernames, emails, IPs) or personal infrastructure in any file except the repository's ownership metadata (`.github/CODEOWNERS`, `LICENSE`); deployment specifics arrive through environment variables.
+- Rationale goes in [`decisions.md`](decisions.md), linked from the rule it explains with `Why:`; deferred work in [`next-steps.md`](next-steps.md) with the condition that triggers it.
+- One-time setup goes in [`REBUILD.md`](REBUILD.md). This file holds only hard rules and non-obvious gotchas, under 1,600 tokens (words × 1.33).
+- Each fact lives in one file; link to it rather than copying it.
+- Code comments only when the why is non-obvious; no multi-line docstrings.
