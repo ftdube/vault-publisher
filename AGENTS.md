@@ -30,7 +30,7 @@ What an outside contributor must follow that CI does not enforce:
 
 - Branch from `main` as `feature/<name>`, `fix/<name>` or `docs/<name>`, then open a pull request.
 - Never commit secrets. CI's `secrets` job scans all of history, but by then a pushed secret is already public: rotate it, since rewriting history does not take it back.
-- No personal identifiers (domains, hostnames, usernames, emails, IPs) or personal infrastructure in any file; deployment specifics arrive through environment variables.
+- No personal identifiers (domains, hostnames, usernames, emails, IPs) or personal infrastructure in any file except the repository's ownership metadata (`.github/CODEOWNERS`, `LICENSE`); deployment specifics arrive through environment variables.
 - Rationale goes in [`decisions.md`](decisions.md), linked from the rule it explains with `Why:`; deferred work in [`next-steps.md`](next-steps.md) with the condition that triggers it.
 - One-time setup goes in [`REBUILD.md`](REBUILD.md). This file holds only hard rules and non-obvious gotchas, under 1,600 tokens (words × 1.33).
 - Each fact lives in one file; link to it rather than copying it.
