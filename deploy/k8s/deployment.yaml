@@ -38,7 +38,7 @@ spec:
       # gotchas for why (fsGroup doesn't apply to hostPath).
       initContainers:
         - name: init-permissions
-          image: busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+          image: busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           securityContext:
             runAsUser: 0
           command: ["chown", "-R", "1000:1000", "/vault", "/site"]
@@ -49,7 +49,7 @@ spec:
               mountPath: /site
       containers:
         - name: git-sync
-          image: registry.k8s.io/git-sync/git-sync:v4.2.4@sha256:8bfbf28623690fba06c65ec392e42023d28ecfc7e0fbfd4443388d020dc112ea
+          image: registry.k8s.io/git-sync/git-sync:v4.8.0@sha256:a20644562fba94773e594885cb001aadb5a3172175f13ac1215e5b2033c9200e
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
