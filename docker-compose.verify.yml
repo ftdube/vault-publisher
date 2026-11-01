@@ -9,7 +9,7 @@
 #   curl http://localhost:8080/
 services:
   git-sync:
-    image: registry.k8s.io/git-sync/git-sync:v4.2.4@sha256:8bfbf28623690fba06c65ec392e42023d28ecfc7e0fbfd4443388d020dc112ea
+    image: registry.k8s.io/git-sync/git-sync:v4.8.0@sha256:a20644562fba94773e594885cb001aadb5a3172175f13ac1215e5b2033c9200e
     user: root # named volume is root-owned; hostPath perms are a k8s-manifest concern, not this rig's
     volumes:
       - vault:/vault
