@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "This repository's rules on top of the shared policy. One updater per ecosystem: this replaced .github/dependabot.yml.",
+  "extends": [
+    "github>ftdube/renovate-config"
+  ],
+  "kubernetes": {
+    "managerFilePatterns": [
+      "/^deploy/k8s/.+\\.ya?ml$/"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "The Dockerfile and CI's setup-node run one Node (scripts/ci-node-matches-dockerfile.sh), so it moves in one PR across both",
+      "matchPackageNames": [
+        "node"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "node"
+    },
+    {
+      "matchPackageNames": [
+        "node"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "node-major"
+    },
+    {
+      "description": "deploy/k8s's builder image is a placeholder (ghcr.io/OWNER/…) the deployer replaces; Renovate reads its name as just ghcr.io",
+      "matchPackageNames": [
+        "ghcr.io"
+      ],
+      "enabled": false
+    }
+  ]
+}

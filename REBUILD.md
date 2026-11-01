@@ -12,6 +12,7 @@ From an empty workstation to a published site. This repository publishes an imag
 | A read-only deploy key, and the git host's `known_hosts` | git-sync over SSH; skip for an HTTPS-public repo | Kubernetes Secret `vault-publisher-ssh-key` |
 | A node with room for the two hostPath directories | The Pod, pinned by `nodeSelector` | Your cluster |
 | The site's public base URL | `QUARTZ_BASE_URL` | `deploy/k8s/configmap.yaml` |
+| The Renovate GitHub App (Mend-hosted), and read access to the public preset `renovate.json` extends | Dependency update pull requests; not needed to build or run | The repository owner's GitHub account; install the app only once `renovate.json` is on `main`, or it opens an onboarding pull request with its own default config |
 
 ## Workstation
 

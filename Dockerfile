@@ -1,7 +1,7 @@
 # Trims package.json to only the fields npm ci / dependency resolution care
 # about, so edits to description/scripts/etc. don't bust the npm ci and
 # plugin pre-bake layers below — pre-bake alone costs ~3.5min when it reruns.
-FROM node:26-slim AS deps-manifest
+FROM node:26.13.0-slim@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39 AS deps-manifest
 WORKDIR /usr/src/app
 COPY package.json ./
 RUN node -e " \
@@ -11,7 +11,7 @@ RUN node -e " \
   fs.writeFileSync('package.json', JSON.stringify({ name, version, private: priv, type, engines, dependencies, devDependencies, overrides }, null, 2)); \
   "
 
-FROM node:26-slim AS builder
+FROM node:26.13.0-slim@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39 AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/src/app
@@ -42,7 +42,7 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build && npm prune --omit=dev
 
-FROM node:26-slim
+FROM node:26.13.0-slim@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39
 # Nothing runs npm at runtime (plugins are pre-baked); the base image's bundled
 # copy only adds CVEs to the trivy scan (issue #9).
 RUN apt-get update && apt-get install -y --no-install-recommends gettext-base \

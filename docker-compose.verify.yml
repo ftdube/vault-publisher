@@ -9,7 +9,7 @@
 #   curl http://localhost:8080/
 services:
   git-sync:
-    image: registry.k8s.io/git-sync/git-sync:v4.2.4
+    image: registry.k8s.io/git-sync/git-sync:v4.2.4@sha256:8bfbf28623690fba06c65ec392e42023d28ecfc7e0fbfd4443388d020dc112ea
     user: root # named volume is root-owned; hostPath perms are a k8s-manifest concern, not this rig's
     volumes:
       - vault:/vault
@@ -33,7 +33,7 @@ services:
       - git-sync
 
   caddy:
-    image: caddy:alpine
+    image: caddy:2.11.7-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5
     volumes:
       - site:/site:ro
       - ./deploy/k8s/Caddyfile:/etc/caddy/Caddyfile:ro

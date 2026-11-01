@@ -15,14 +15,14 @@
     "start": "node dist/daemon.js"
   },
   "dependencies": {
-    "@jackyzha0/quartz": "github:jackyzha0/quartz#v5"
+    "@jackyzha0/quartz": "github:jackyzha0/quartz#97a2d05f80c4c50534959b1d0d41cc4b3895625e"
   },
   "overrides": {
-    "sharp": "^0.35.5"
+    "sharp": "0.35.5"
   },
   "devDependencies": {
-    "@types/node": "^26.6.6",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "@types/node": "26.6.6",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
   }
 }

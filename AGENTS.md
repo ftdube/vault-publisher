@@ -6,7 +6,7 @@ Daemon that builds an Obsidian vault as a static site with Quartz whenever a `gi
 
 - Never bake vault content, personal domains, hostnames, or credentials into the image
 - `VAULT_REPO_URL`/`VAULT_BRANCH`/`SSH_KEY_PATH` are injected into the `git-sync` sidecar; `QUARTZ_BASE_URL`/`QUARTZ_PAGE_TITLE`/`POLL_INTERVAL` into the daemon — both via env vars / K8s Secrets
-- `@jackyzha0/quartz` is a git-ref-pinned dependency (`private: true`, not on the npm registry) — do not fork or patch it; upgrades are a `package.json` ref bump
+- `@jackyzha0/quartz` is pinned by commit (`private: true`, not on the npm registry; the `v5` branch head as of 2026-11-01) — do not fork or patch it; upgrades are a `package.json` commit bump by hand, since Renovate proposes none for a bare commit
 - Build output is written to `/site/next`, then renamed to `/site/current` — never write directly to `/site/current` mid-build; never rename the `/site` mount point itself. Why: [`decisions.md`](decisions.md#site-itself-is-never-renamed-risk-6-issue-4)
 
 ## Non-obvious gotchas
@@ -30,7 +30,7 @@ What an outside contributor must follow that CI does not enforce:
 
 - Branch from `main` as `feature/<name>`, `fix/<name>` or `docs/<name>`, then open a pull request.
 - Never commit secrets. CI's `secrets` job scans all of history, but by then a pushed secret is already public: rotate it, since rewriting history does not take it back.
-- No personal identifiers (domains, hostnames, usernames, emails, IPs) or personal infrastructure in any file except the repository's ownership metadata (`.github/CODEOWNERS`, `LICENSE`); deployment specifics arrive through environment variables.
+- No personal identifiers (domains, hostnames, usernames, emails, IPs) or personal infrastructure in any file except the repository's ownership metadata (`.github/CODEOWNERS`, `LICENSE`, and the preset `renovate.json` extends); deployment specifics arrive through environment variables.
 - Rationale goes in [`decisions.md`](decisions.md), linked from the rule it explains with `Why:`; deferred work in [`next-steps.md`](next-steps.md) with the condition that triggers it.
 - One-time setup goes in [`REBUILD.md`](REBUILD.md). This file holds only hard rules and non-obvious gotchas, under 1,600 tokens (words × 1.33).
 - Each fact lives in one file; link to it rather than copying it.
