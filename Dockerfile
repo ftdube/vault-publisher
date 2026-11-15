@@ -44,8 +44,13 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:26.13.0-slim@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39
 # Nothing runs npm at runtime (plugins are pre-baked); the base image's bundled
-# copy only adds CVEs to the trivy scan (issue #9).
-RUN apt-get update && apt-get install -y --no-install-recommends gettext-base \
+# copy only adds CVEs to the trivy scan (issue #9). `upgrade` pulls Debian
+# security fixes the pinned base image predates; CI passes today's date as
+# DEBIAN_REFRESH so a cached layer can't keep stale packages. See decisions.md.
+ARG DEBIAN_REFRESH=unset
+RUN echo "Debian refresh: ${DEBIAN_REFRESH}" \
+    && apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends gettext-base \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /usr/src/app

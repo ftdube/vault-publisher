@@ -103,6 +103,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Busts only the runtime stage's apt layer once a day, so restored GHA
+      # cache can't hold back Debian security fixes; builder layers stay cached.
+      - id: refresh
+        if: needs.changes.outputs.code == 'true'
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       # Scan the built image, not the repo: an fs scan flags devDependencies
       # that `npm prune --omit=dev` drops, and misses the base image's OS
       # packages, which do ship (issue #9). Load, scan, then push.
@@ -113,6 +119,7 @@ jobs:
           platforms: linux/arm64
           load: true
           tags: ${{ env.IMAGE }}:${{ github.sha }}
+          build-args: DEBIAN_REFRESH=${{ steps.refresh.outputs.date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -137,4 +144,5 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
+          build-args: DEBIAN_REFRESH=${{ steps.refresh.outputs.date }}
           cache-from: type=gha
