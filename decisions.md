@@ -8,7 +8,7 @@ Rationale behind the rules and gotchas in [`AGENTS.md`](AGENTS.md). Newest first
 
 CI's trivy scan fails on any HIGH or CRITICAL vulnerability with a fix available. Debian publishes security fixes faster than the Node image is rebuilt, and Renovate pins the base by digest, so a fix released after that digest fails every build, whatever the PR changes. In November 2026 that was apt (CVE-2026-109518) and zlib (CVE-2026-76844, CVE-2026-85091); even the newer `node:26.13.1-slim` still carried the vulnerable zlib.
 
-Upgrading in the runtime stage pulls those fixes at build time. The cost: two builds from the same commit can differ in Debian package versions. Only the runtime stage upgrades, because only it ships.
+Upgrading in the runtime stage pulls those fixes at build time. CI restores the BuildKit cache, which would otherwise reuse the upgrade layer indefinitely, so CI passes the UTC date as the `DEBIAN_REFRESH` build arg: the layer reruns at most once a day, and the builder stages, which don't declare the arg, stay cached. The cost: two builds from the same commit can differ in Debian package versions. Only the runtime stage upgrades, because only it ships.
 
 **Revisit:** if reproducible builds matter more than a green scan, or the Node images start tracking Debian security releases closely enough that the upgrade is a no-op.
 
