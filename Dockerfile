@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/src/app
 COPY --from=deps-manifest /usr/src/app/package.json ./
-COPY package-lock.json ./
+COPY package-lock.json .npmrc ./
 RUN npm ci
 COPY quartz.config.yaml ./
 RUN cp quartz.config.yaml node_modules/@jackyzha0/quartz/quartz.config.yaml

@@ -6,7 +6,8 @@ Daemon that builds an Obsidian vault as a static site with Quartz whenever a `gi
 
 - Never bake vault content, personal domains, hostnames, or credentials into the image
 - `VAULT_REPO_URL`/`VAULT_BRANCH`/`SSH_KEY_PATH` are injected into the `git-sync` sidecar; `QUARTZ_BASE_URL`/`QUARTZ_PAGE_TITLE`/`POLL_INTERVAL` into the daemon — both via env vars / K8s Secrets
-- `@jackyzha0/quartz` is pinned by commit (`private: true`, not on the npm registry; the `v5` branch head as of 2026-11-01) — do not fork or patch it; upgrades are a `package.json` commit bump by hand, since Renovate proposes none for a bare commit
+- `@jackyzha0/quartz` is pinned by commit (`private: true`, not on the npm registry; the `v5` branch head as of 2026-11-01) — do not fork or patch it; upgrades are a `package.json` commit bump, which Renovate proposes as a digest update
+- `.npmrc`'s `allow-git=root` must stay: npm 12 refuses git dependencies by default, so Renovate couldn't update the lock for a Quartz bump. Why: [`decisions.md`](decisions.md#npmrc-allows-root-git-dependencies)
 - Build output is written to `/site/next`, then renamed to `/site/current` — never write directly to `/site/current` mid-build; never rename the `/site` mount point itself. Why: [`decisions.md`](decisions.md#site-itself-is-never-renamed-risk-6-issue-4)
 
 ## Non-obvious gotchas

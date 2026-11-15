@@ -4,6 +4,14 @@ Rationale behind the rules and gotchas in [`AGENTS.md`](AGENTS.md). Newest first
 
 ---
 
+### `.npmrc` allows root git dependencies
+
+npm 12 changed `allow-git` to default to `none`, so it refuses to fetch git dependencies. Renovate runs npm 12, so for the Quartz digest bump (#50) it changed `package.json` but failed to update `package-lock.json` (`EALLOWGIT`), and `npm ci` then failed in CI. `allow-git=root` permits only the git dependencies in our own `package.json`. Quartz is the only one in the lock, so a dependency can't pull in a git dependency of its own.
+
+The Dockerfile copies `.npmrc` before `npm ci`, so the image build keeps working once the Node image ships npm 12; today it ships 11.20, where the default is still `all`.
+
+**Revisit:** if Quartz is published to the npm registry, or a dependency needs its own git dependency (`all`).
+
 ### The runtime stage runs `apt-get upgrade`
 
 CI's trivy scan fails on any HIGH or CRITICAL vulnerability with a fix available. Debian publishes security fixes faster than the Node image is rebuilt, and Renovate pins the base by digest, so a fix released after that digest fails every build, whatever the PR changes. In November 2026 that was apt (CVE-2026-109518) and zlib (CVE-2026-76844, CVE-2026-85091); even the newer `node:26.13.1-slim` still carried the vulnerable zlib.
