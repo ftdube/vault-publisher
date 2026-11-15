@@ -15,7 +15,7 @@
     "start": "node dist/daemon.js"
   },
   "dependencies": {
-    "@jackyzha0/quartz": "github:jackyzha0/quartz#97a2d05f80c4c50534959b1d0d41cc4b3895625e"
+    "@jackyzha0/quartz": "github:jackyzha0/quartz#7cfb0796165c848be5438117e9806802123bf676"
   },
   "overrides": {
     "sharp": "0.35.5"
